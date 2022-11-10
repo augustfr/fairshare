@@ -1,5 +1,9 @@
 import { config } from 'dotenv';
 import moment from 'moment';
+import { getUserBalance } from "./bot.js";
+import { updateBalance } from "./bot.js";
+import { getServerStats } from "./bot.js";
+import { getUsers } from "./bot.js";
 import {
   Client,
   GatewayIntentBits,
@@ -28,23 +32,6 @@ const client = new Client({
   ],
 });
 
-async function getUserBalance(user, serverID) {
-  const { data, error } = await supabase
-  .from('balances')
-  .select('balance')
-  .eq('userID', user)
-  .eq('serverID', serverID)
-  return data[0].balance
-}
-
-async function updateBalance(user, serverID, newAmount) {
-  const { error } = await supabase
-  .from('balances')
-  .update({balance: newAmount})
-  .eq('userID', user)
-  .eq('serverID', serverID)
-}
-
 async function updatePayout(serverID) {
   const currentDate = new Date();
   const { error } = await supabase
@@ -53,29 +40,11 @@ async function updatePayout(serverID) {
   .eq('serverID', serverID)
 }
 
-async function getServerStats(serverID) {
-  const { data, error } = await supabase
-  .from('serverStats')
-  .select()
-  .eq('serverID', serverID)
-  .single()
-  return data
-}
-
 async function getServers() {
   const { data, error } = await supabase
   .from('serverStats')
   .select()
   const result = data.map(a => a.serverID)
-  return result
-}
-
-async function getUsers(serverID) {
-  const { data, error } = await supabase
-  .from('balances')
-  .select('userID')
-  .eq('serverID', serverID)
-  const result = data.map(a => a.userID)
   return result
 }
 

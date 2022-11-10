@@ -80,7 +80,7 @@ async function userVoted(user, serverID) {
   }
 }
 
-async function getUserBalance(user, serverID) {
+export async function getUserBalance(user, serverID) {
   const { data, error } = await supabase
   .from('balances')
   .select('balance')
@@ -136,7 +136,7 @@ async function updateServer(serverID, genRole, symbol, feed_channel, removeFeed)
   .eq('serverID', serverID)
 }
 
-async function getServerStats(serverID) {
+export async function getServerStats(serverID) {
   const { data, error } = await supabase
   .from('serverStats')
   .select()
@@ -145,18 +145,11 @@ async function getServerStats(serverID) {
   return data
 }
 
-async function updateBalance(user, serverID, newAmount) {
+export async function updateBalance(user, serverID, newAmount) {
   const { error } = await supabase
   .from('balances')
   .update({balance: newAmount})
   .eq('userID', user)
-  .eq('serverID', serverID)
-}
-
-async function openVoting(serverID) {
-  const { error } = await supabase
-  .from('serverStats')
-  .update({voteOpen: true})
   .eq('serverID', serverID)
 }
 
@@ -209,7 +202,7 @@ async function checkMyVote(userID, serverID) {
   return [{fee, income}]
 }
 
-async function getUsers(serverID) {
+export async function getUsers(serverID) {
   const { data, error } = await supabase
   .from('balances')
   .select('userID')
