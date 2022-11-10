@@ -100,8 +100,10 @@ export async function main() {
           await updateBalance(users[index], stats.serverID, newAmount)
         }
         await updatePayout(stats.serverID)
-        console.log('Sent payouts')
-        await sendMessage('<@&' + stats.generalRoleID + '>, your daily income has been sent!', stats.feedChannel)
+        console.log('Sent payouts to ' + stats.serverID)
+        if (stats.feedChannel !== null && stats.feedChannel !== '') {
+          await sendMessage('<@&' + stats.generalRoleID + '>, your daily income has been sent!', stats.feedChannel)
+        }
       }
     }
     sleep(10000)
