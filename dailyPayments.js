@@ -103,7 +103,11 @@ export async function runPayments() {
           await updatePayout(stats.serverID)
           console.log('Sent payouts to ' + stats.serverID)
           if (stats.feedChannel !== null && stats.feedChannel !== '') {
-            await sendMessage('<@&' + stats.generalRoleID + '>, your daily income has been sent!', stats.feedChannel)
+            try {
+              await sendMessage('<@&' + stats.generalRoleID + '>, your daily income has been sent!', stats.feedChannel)
+            } catch (error) {
+              console.log('Daily income message failed to send to active feed channel in ' + stats.serverID)
+            }
           }
         }
       }
