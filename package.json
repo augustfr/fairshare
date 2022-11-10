@@ -5,8 +5,7 @@
     "main": "bot.js",
     "scripts": {
         "test": "echo \"Error: no test specified\" && exit 1",
-        "start:main": "nodemon ./bot.js",
-        "start:payments": "nodemon ./dailyPayments.js"
+        "build": "node ./bot.js"
     },
     "keywords": [],
     "author": "",
