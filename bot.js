@@ -231,13 +231,14 @@ client.on('interactionCreate', async (interaction) => {
     const senderID = interaction.member.id
     const serverID = interaction.guildId
     const stats = await getServerStats(serverID)
-    if (interaction.commandName !== 'setup') {
-      const symbol = stats.symbol
-    }
     console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' in " + serverDisplayName + ' (' + serverID + ')')
     if (interaction.commandName === 'setup') {
+      if (stats === null) {
+        interaction.reply({content: 'This server is not authorized to create a group', ephemeral: true})
+        return
+      }
       if (interaction.member.roles.cache.has(stats.adminRoleID)) {
-        if (symbol === null || symbol === '') {
+        if (stats.symbol === null || stats.symbol === '') {
           try {
             if (interaction.member.roles.cache.has(interaction.options.getRole('general_role').id)) {
               await interaction.member.roles.add(interaction.options.getRole('general_role'))
@@ -261,7 +262,8 @@ client.on('interactionCreate', async (interaction) => {
       } else {
         interaction.reply({content: 'Must be server admin', ephemeral: true})
       }
-    } else if (stats.income !== null) {
+    } else if (stats.symbol !== null) {
+        const symbol = stats.symbol
         if (interaction.commandName === 'join') {
           if (await userExists(senderID, serverID)) {
             interaction.reply({content: 'You are already in this group', ephemeral: true})
