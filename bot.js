@@ -231,7 +231,9 @@ client.on('interactionCreate', async (interaction) => {
     const senderID = interaction.member.id
     const serverID = interaction.guildId
     const stats = await getServerStats(serverID)
-    const symbol = stats.symbol
+    if (interaction.commandName !== 'setup') {
+      const symbol = stats.symbol
+    }
     console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' in " + serverDisplayName + ' (' + serverID + ')')
     if (interaction.commandName === 'setup') {
       if (interaction.member.roles.cache.has(stats.adminRoleID)) {
