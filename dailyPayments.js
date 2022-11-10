@@ -58,13 +58,12 @@ async function sendMessage(msg, channelid) {
   channel.send(msg);
 }
 
-client.on('ready', () => console.log(`${client.user.tag} has logged in!`));
+export async function runPayments() {
+  console.log('payments enabled')
 
-export async function main() {
-
-  client.on('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
-  });
+  // client.on('ready', () => {
+  //   console.log(`Logged in as ${client.user.tag}!`);
+  // });
 
   client.login(TOKEN);
 
@@ -110,5 +109,3 @@ export async function main() {
   }
 
 }
-
-main()

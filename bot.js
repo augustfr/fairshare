@@ -1,4 +1,5 @@
 import { config } from 'dotenv';
+import { runPayments } from './dailyPayments.js'
 import {
   Client,
   GatewayIntentBits,
@@ -437,4 +438,6 @@ export async function main() {
 
 }
 
+
 main()
+runPayments()
