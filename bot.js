@@ -49,9 +49,10 @@ const median = arr => {
 }
 
 async function initUser(user, serverID, income) {
+  const currentDate = new Date();
   const { error } = await supabase
   .from('balances')
-  .insert({ userID: user, balance: income, serverID: serverID})
+  .insert({ userID: user, balance: income, serverID: serverID, dateJoined: currentDate})
 }
 
 async function userExists(user, serverID) {
