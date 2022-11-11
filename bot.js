@@ -260,11 +260,11 @@ async function getVolume(serverID, startDate, endDate) {
   .eq('serverID', serverID)
   const dates = data.map(a => a.date)
   const amounts = data.map(a => a.amount)
-
   let volume = 0
   for (let i = 0; i < dates.length; i += 1) {
     const transactionDate = new Date(dates[i]).getTime()
-    if (startDate << transactionDate  && transactionDate << endDate) {
+    if ((startDate < transactionDate) && (transactionDate < endDate)) {
+      console.log('match')
       volume += amounts[i]
     }
   }
