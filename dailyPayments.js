@@ -67,7 +67,7 @@ export async function runPayments() {
 
 
   while (true) {
-    const serverList = await getServers(),
+    const serverList = await getServers()
 
     for (let i = 0; i < serverList.length; i++) {
       const stats = await getServerStats(serverList[i])
