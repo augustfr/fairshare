@@ -57,6 +57,28 @@ function sumArray(array) {
   return sum;
 }
 
+function roundUp(num) {
+  return Math.ceil(num * 100) / 100;
+}
+
+async function computeGiniIndex(serverID) {
+  const { data, error } = await supabase
+  .from('balances')
+  .select()
+  .eq('serverID', serverID)
+  const balances = data.map(a => a.balance)
+  const average = array => array.reduce((a, b) => a + b) / array.length;
+  const averageBalance = average(balances)
+  const num = balances.length
+  let sumOfDifferences = 0;
+  for (let i = 0; i < num; i++) {
+    for (let j = 0; j < num; j++) {
+      sumOfDifferences += Math.abs(balances[i] - balances[j])
+    }
+  }
+  return sumOfDifferences/(2 * num * num * averageBalance)
+}
+
 async function initUser(user, serverID, income) {
   const currentDate = new Date();
   const { error } = await supabase
@@ -416,10 +438,10 @@ client.on('interactionCreate', async (interaction) => {
           interaction.reply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a ' + symbol + myVote[0].income + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
         }
        } else if (interaction.commandName === 'stats') {
+        const gini = roundUp(await computeGiniIndex(serverID))
         const numUsers = (await getUsers(serverID)).length
         const serverMoneySupply = await moneySupply(serverID)
-
-        interaction.reply({content: 'Current server stats:\n\nNumber of members: ' + numUsers + '\nTotal currency in circulation: ' + symbol + serverMoneySupply + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income, ephemeral: true})
+        interaction.reply({content: 'Current server stats:\n\nNumber of members: ' + numUsers + '\nTotal currency in circulation: ' + symbol + serverMoneySupply + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nGini index: ' + gini, ephemeral: true})
        }
     } else {
         interaction.reply({content: "Please initiate your account by typing '/join'", ephemeral: true})
