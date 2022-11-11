@@ -76,7 +76,6 @@ export async function runPayments() {
     for (let i = 0; i < serverList.length; i++) {
       const stats = await getServerStats(serverList[i])
       
-
       const users = await getUsers(stats.serverID)
       //const userObj = await client.users.fetch(users[0])
 
@@ -87,14 +86,11 @@ export async function runPayments() {
 
       if (stats.creationTime !== null) {
 
-        const details = [stats.serverID, stats.payoutTime]
-        const splitArray = details[1].split(':')
+        const details = [stats.serverID, stats.latestPayout]
 
         await getUsers(stats.serverID)
-        if (splitArray[1].startsWith('0') && !(splitArray[1].startsWith('00'))) {
-          splitArray[1] = splitArray[1].replace('0', '');
-        }
-        if (splitArray[0] === currentSplitArray[0] && splitArray[1] === currentSplitArray[1] && (moment().diff(moment(new Date(stats.latestPayout)), 'days') > 0)) {
+
+        if (Date.now() - (new Date(details[1]).getTime()) > 86400000) {
           const users = await getUsers(stats.serverID)
           for (let index = 0; index < users.length; index++) {
             const newAmount = (await getUserBalance(users[index], stats.serverID)) + stats.income

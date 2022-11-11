@@ -92,7 +92,6 @@ export async function getUserBalance(user, serverID) {
 
 async function setServerStats(serverID, fee, income, genRole, symbol, feed_channel) {
   const currentDate = new Date();
-  const currentTime = currentDate.getHours() + ":" + currentDate.getMinutes() + ":" + currentDate.getSeconds();
   if (feed_channel === null){
     feed_channel = null
   } else {
@@ -100,7 +99,7 @@ async function setServerStats(serverID, fee, income, genRole, symbol, feed_chann
   }
   const { error } = await supabase
   .from('serverStats')
-  .update({fee: fee, income: income, generalRoleID: genRole.id, symbol: symbol, feedChannel: feed_channel, voteOpen: true, payoutTime: currentTime, creationTime: currentDate, latestPayout: currentDate})
+  .update({fee: fee, income: income, generalRoleID: genRole.id, symbol: symbol, feedChannel: feed_channel, voteOpen: true, creationTime: currentDate, latestPayout: currentDate})
   .eq('serverID', serverID)
 }
 
