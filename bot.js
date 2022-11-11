@@ -465,7 +465,7 @@ client.on('interactionCreate', async (interaction) => {
         }
        } else if (interaction.commandName === 'stats') {
         const currentDate = Date.now();
-        const volume = await getVolume(serverID, 1668160594940, currentDate - 604800000)
+        const volume = await getVolume(serverID, currentDate - 604800000, currentDate)
         const gini = roundUp(await computeGiniIndex(serverID))
         const numUsers = (await getUsers(serverID)).length
         const serverMoneySupply = await moneySupply(serverID)
