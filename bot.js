@@ -18,7 +18,7 @@ import TallyCommand from './commands/tally.js';
 import RatesCommand from './commands/rates.js';
 import AcceptVoteCommand from './commands/acceptVotes.js';
 import UpdateCommand from './commands/update.js';
-import StatsCommand from './commands/stats.js';
+import SettingsCommand from './commands/settings.js';
 import MyVoteCommand from './commands/myVote.js';
 
 config();
@@ -383,12 +383,11 @@ client.on('interactionCreate', async (interaction) => {
         } else {
           interaction.reply({content: 'Must be server admin', ephemeral: true})
         }
-      } else if (interaction.commandName === 'stats') {
-        const users = (await getUsers(serverID)).length
+      } else if (interaction.commandName === 'settings') {
         if (stats.feedChannel === null) {
-          interaction.reply({content: 'Current server stats:\n\nNumber of members: ' + users + '\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: None', ephemeral: true})
+          interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: None', ephemeral: true})
         } else {
-          interaction.reply({content: 'Current server stats:\n\nNumber of members: ' + users + '\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: <#' + stats.feedChannel + '>', ephemeral: true})
+          interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: <#' + stats.feedChannel + '>', ephemeral: true})
         }     
        } else if (interaction.commandName === 'my_vote') {
         const myVote = await checkMyVote(senderID, serverID)
@@ -418,7 +417,7 @@ export async function main() {
     RatesCommand,
     AcceptVoteCommand,
     UpdateCommand,
-    StatsCommand,
+    SettingsCommand,
     MyVoteCommand
   ];
 
