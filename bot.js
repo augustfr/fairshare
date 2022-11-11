@@ -253,6 +253,24 @@ export async function getUsers(serverID) {
   return result
 }
 
+async function getVolume(serverID, startDate, endDate) {
+  const { data, error } = await supabase
+  .from('transactions')
+  .select()
+  .eq('serverID', serverID)
+  const dates = data.map(a => a.date)
+  const amounts = data.map(a => a.amount)
+
+  let volume = 0
+  for (let i = 0; i < dates.length; i += 1) {
+    const transactionDate = new Date(dates[i]).getTime()
+    if (startDate << transactionDate << endDate) {
+      volume += amounts[i]
+    }
+  }
+  return volume
+}
+
 async function transactionLog(serverID, userID, receiverID, amount, fee) {
   const currentDate = new Date();
   const { error } = await supabase
@@ -345,7 +363,6 @@ client.on('interactionCreate', async (interaction) => {
                   updateBalance(senderID, serverID, senderCurrentBalance - amountWithFee)
                   updateBalance(receiverID, serverID, receiverCurrentBalance + amount)
                   transactionLog(serverID, senderID, receiverID, amount, fee)
-                  console.log('logged')
                   await interaction.reply({content: 'Sent ' + symbol + amount + ' to <@' + receiverID + '>, and a ' + symbol + fee + ' transaction fee was taken, totalling to ' + symbol + amountWithFee, ephemeral: true})
                   interaction.options.getUser('user').send('<@' + senderID + '> has sent you ' + symbol + amount + ' in the ' + serverDisplayName + ' group').catch((err) => {
                     if (stats.feedChannel === null || stats.feedChannel === '') {
@@ -447,10 +464,12 @@ client.on('interactionCreate', async (interaction) => {
           interaction.reply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a ' + symbol + myVote[0].income + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
         }
        } else if (interaction.commandName === 'stats') {
+        const currentDate = Date.now();
+        const volume = await getVolume(serverID, 1668160594940, currentDate - 604800000)
         const gini = roundUp(await computeGiniIndex(serverID))
         const numUsers = (await getUsers(serverID)).length
         const serverMoneySupply = await moneySupply(serverID)
-        interaction.reply({content: 'Current server stats:\n\nNumber of members: ' + numUsers + '\nTotal currency in circulation: ' + symbol + serverMoneySupply + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nGini index: ' + gini, ephemeral: true})
+        interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction Volume (last 7 days): ' + symbol + volume + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” Index: ' + gini, ephemeral: true})
        }
     } else {
         interaction.reply({content: "Please initiate your account by typing '/join'", ephemeral: true})
