@@ -264,7 +264,7 @@ async function getVolume(serverID, startDate, endDate) {
   let volume = 0
   for (let i = 0; i < dates.length; i += 1) {
     const transactionDate = new Date(dates[i]).getTime()
-    if (startDate << transactionDate << endDate) {
+    if (startDate << transactionDate  && transactionDate << endDate) {
       volume += amounts[i]
     }
   }
