@@ -68,15 +68,11 @@ export async function runPayments() {
 
   while (true) {
     const serverList = await getServers(),
-          currentDate = new Date(),
-          time = currentDate.getHours() + ":" + currentDate.getMinutes(),
-          currentSplitArray = time.split(':')
-    
 
     for (let i = 0; i < serverList.length; i++) {
       const stats = await getServerStats(serverList[i])
       
-      const users = await getUsers(stats.serverID)
+      //const users = await getUsers(stats.serverID)
       //const userObj = await client.users.fetch(users[0])
 
       // const roles = await userObj.roles.cache.first
