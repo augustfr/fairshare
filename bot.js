@@ -469,7 +469,7 @@ client.on('interactionCreate', async (interaction) => {
         const gini = roundUp(await computeGiniIndex(serverID))
         const numUsers = (await getUsers(serverID)).length
         const serverMoneySupply = await moneySupply(serverID)
-        interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + volume + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” Index: ' + gini, ephemeral: true})
+        interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + volume + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
        }
     } else {
         interaction.reply({content: "Please initiate your account by typing '/join'", ephemeral: true})
