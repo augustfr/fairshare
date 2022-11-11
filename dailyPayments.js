@@ -94,12 +94,14 @@ export async function runPayments() {
         if (splitArray[1].startsWith('0') && !(splitArray[1].startsWith('00'))) {
           splitArray[1] = splitArray[1].replace('0', '');
         }
+        console.log('splitarray: ' + splitArray[0])
+        console.log('current: ' + currentSplitArray[0])
         if (splitArray[0] === currentSplitArray[0] && splitArray[1] === currentSplitArray[1] && (moment().diff(moment(new Date(stats.latestPayout)), 'days') > 0)) {
           const users = await getUsers(stats.serverID)
           for (let index = 0; index < users.length; index++) {
             const newAmount = (await getUserBalance(users[index], stats.serverID)) + stats.income
             await updateBalance(users[index], stats.serverID, newAmount)
-          }
+          } 
           await updatePayout(stats.serverID)
           console.log('Sent payouts to ' + stats.serverID)
           if (stats.feedChannel !== null && stats.feedChannel !== '') {
