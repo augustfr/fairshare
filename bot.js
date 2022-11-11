@@ -20,6 +20,7 @@ import AcceptVoteCommand from './commands/acceptVotes.js';
 import UpdateCommand from './commands/update.js';
 import SettingsCommand from './commands/settings.js';
 import MyVoteCommand from './commands/myVote.js';
+import StatsCommand from './commands/stats.js';
 
 config();
 
@@ -46,6 +47,14 @@ const median = arr => {
   const mid = Math.floor(arr.length / 2),
     nums = [...arr].sort((a, b) => a - b);
   return arr.length % 2 !== 0 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+}
+
+function sumArray(array) {
+  let sum = 0;
+  for (let i = 0; i < array.length; i += 1) {
+    sum += array[i];
+  }
+  return sum;
 }
 
 async function initUser(user, serverID, income) {
@@ -190,6 +199,16 @@ async function tally(serverID) {
   const fee = data.map(a => a.fee)
   const income = data.map(a => a.income)
   return [{fee: median(fee), income: median(income), length: fee.length}]
+}
+
+async function moneySupply(serverID) {
+  const { data, error } = await supabase
+  .from('balances')
+  .select()
+  .eq('serverID', serverID)
+  const balances = data.map(a => a.balance)
+  const result  = sumArray(balances)
+  return result
 }
 
 async function checkMyVote(userID, serverID) {
@@ -396,6 +415,11 @@ client.on('interactionCreate', async (interaction) => {
         } else {
           interaction.reply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a ' + symbol + myVote[0].income + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
         }
+       } else if (interaction.commandName === 'stats') {
+        const numUsers = (await getUsers(serverID)).length
+        const serverMoneySupply = await moneySupply(serverID)
+
+        interaction.reply({content: 'Current server stats:\n\nNumber of members: ' + numUsers + '\nTotal currency in circulation: ' + symbol + serverMoneySupply + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income, ephemeral: true})
        }
     } else {
         interaction.reply({content: "Please initiate your account by typing '/join'", ephemeral: true})
@@ -418,7 +442,8 @@ export async function main() {
     AcceptVoteCommand,
     UpdateCommand,
     SettingsCommand,
-    MyVoteCommand
+    MyVoteCommand,
+    StatsCommand
   ];
 
     try {
