@@ -104,7 +104,7 @@ export async function runPayments() {
         }
       }
     }
-    sleep(10000)
+    sleep(3600000)
   }
 
 }
