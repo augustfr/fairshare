@@ -2,6 +2,6 @@ import { SlashCommandBuilder } from '@discordjs/builders';
 
 const initCommand = new SlashCommandBuilder()
     .setName('join')
-    .setDescription('Join the group!');
+    .setDescription('Request to join the group!');
 
 export default initCommand.toJSON();

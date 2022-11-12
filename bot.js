@@ -21,6 +21,7 @@ import UpdateCommand from './commands/update.js';
 import SettingsCommand from './commands/settings.js';
 import MyVoteCommand from './commands/myVote.js';
 import StatsCommand from './commands/stats.js';
+import EndorseCommand from './commands/endorse.js';
 
 config();
 
@@ -79,18 +80,36 @@ async function computeGiniIndex(serverID) {
   return sumOfDifferences/(2 * num * num * averageBalance)
 }
 
-async function initUser(user, serverID, income) {
+async function requestToJoin(userID, serverID) {
   const currentDate = new Date();
   const { error } = await supabase
-  .from('balances')
-  .insert({ userID: user, balance: income, serverID: serverID, dateJoined: currentDate})
+  .from('joinRequests')
+  .insert({ userID: userID, serverID: serverID, requestDate: currentDate, votes: 0})
 }
 
-async function userExists(user, serverID) {
-  const {data} = await supabase
-  .from('balances')
-  .select('serverID')
-  .eq('userID', user)
+async function getUserEndorsements(userID, serverID) {
+  const { data, error } = await supabase
+  .from('joinRequests')
+  .select('votes')
+  .eq('userID', userID)
+  .eq('serverID', serverID)
+  return data[0].votes
+}
+
+async function addEndorsement(userID, serverID, updatedCount) {
+  const { error } = await supabase
+  .from('joinRequests')
+  .update({votes: updatedCount})
+  .eq('userID', userID)
+  .eq('serverID', serverID)
+}
+
+async function alreadyEndorsed(senderID, receiverID, serverID) {
+  const { data, error } = await supabase
+  .from('endorsements')
+  .select()
+  .eq('senderID', senderID)
+  .eq('receiverID', receiverID)
   .eq('serverID', serverID)
   .single()
   if(data !== null) {
@@ -100,11 +119,38 @@ async function userExists(user, serverID) {
   }
 }
 
-async function userVoted(user, serverID) {
+async function recordEndorsement(senderID, receiverID, serverID) {
+  const { error } = await supabase
+  .from('endorsements')
+  .insert({senderID: senderID, receiverID: receiverID, serverID: serverID})
+}
+
+async function initUser(userID, serverID, income) {
+  const currentDate = new Date();
+  const { error } = await supabase
+  .from('balances')
+  .insert({ userID: userID, balance: income, serverID: serverID, dateJoined: currentDate})
+}
+
+async function userExists(userID, serverID) {
+  const {data} = await supabase
+  .from('balances')
+  .select('serverID')
+  .eq('userID', userID)
+  .eq('serverID', serverID)
+  .single()
+  if(data !== null) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+async function userVoted(userID, serverID) {
   const {data} = await supabase
   .from('votes')
   .select()
-  .eq('userID', user)
+  .eq('userID', userID)
   .eq('serverID', serverID)
   if (data === null || data.length === 0) {
     return false
@@ -113,11 +159,11 @@ async function userVoted(user, serverID) {
   }
 }
 
-export async function getUserBalance(user, serverID) {
+export async function getUserBalance(userID, serverID) {
   const { data, error } = await supabase
   .from('balances')
   .select('balance')
-  .eq('userID', user)
+  .eq('userID', userID)
   .eq('serverID', serverID)
   return data[0].balance
 }
@@ -177,25 +223,25 @@ export async function getServerStats(serverID) {
   return data
 }
 
-export async function updateBalance(user, serverID, newAmount) {
+export async function updateBalance(userID, serverID, newAmount) {
   const { error } = await supabase
   .from('balances')
   .update({balance: newAmount})
-  .eq('userID', user)
+  .eq('userID', userID)
   .eq('serverID', serverID)
 }
 
-async function vote(user, serverID, fee, income) {
+async function vote(userID, serverID, fee, income) {
   const { error } = await supabase
   .from('votes')
-  .insert({ userID: user, serverID: serverID, fee: fee, income: income})
+  .insert({ userID: userID, serverID: serverID, fee: fee, income: income})
 }
 
-async function updateVote(user, serverID, fee, income) {
+async function updateVote(userID, serverID, fee, income) {
   const { error } = await supabase
   .from('votes')
   .update({ fee: fee, income: income})
-  .eq('userID', user)
+  .eq('userID', userID)
   .eq('serverID', serverID)
 }
 
@@ -286,6 +332,9 @@ function prettyDecimal(number) {
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
+const superMajority = .66
+const simpleMajority = 0.5
+
 client.on('ready', () => console.log(`${client.user.tag} has logged in!`));
 
 
@@ -333,24 +382,39 @@ client.on('interactionCreate', async (interaction) => {
           if (await userExists(senderID, serverID)) {
             interaction.reply({content: 'You are already in this group', ephemeral: true})
           } else {
-            try {
-              await interaction.member.roles.add(String(stats.generalRoleID))
-            }
-            catch (error) {
-              interaction.reply({content: 'Unable to assign role. You have not joined the group yet. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the <@&' + stats.generalRoleID + '> role in the server settings!', ephemeral: true})
-              return
-            }
-            initUser(senderID, serverID, stats.income)
-            interaction.reply({content: 'Welcome to ' + serverDisplayName + '!\nYour current balance: ' + symbol + stats.income + '\n<@&' + stats.generalRoleID + '> role added', ephemeral: true})
-            interaction.member.send('You have joined the ' + serverDisplayName + ' server!').catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you!', ephemeral: true})});
+              requestToJoin(senderID, serverID)
+              interaction.reply({content: 'You have successfully requested to join the ' + serverDisplayName + ' group!', ephemeral: true})
+              interaction.member.send('You have successfully requested to join the ' + serverDisplayName + ' group!').catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you if you are accepted!', ephemeral: true})});
           }
       } else if (await userExists(senderID, serverID)) {
           if (interaction.commandName === 'balance') {
             const balance = await getUserBalance(senderID, serverID)
             interaction.reply({content: 'Your current balance: ' + symbol + balance, ephemeral: true})
-        } else if (interaction.commandName === 'send') {
+        } else if (interaction.commandName === 'endorse') {
+          const receiverID = interaction.options.getUser('user').id
+          if (await alreadyEndorsed(senderID, receiverID, serverID)) {
+            interaction.reply({content: 'You have already endorsed <@' + receiverID + '>!', ephemeral: true})
+          } else {
+            const currentVotes = await getUserEndorsements(receiverID, serverID)
+            const numUsers = (await getUsers(serverID)).length
+            addEndorsement(receiverID, serverID, currentVotes + 1)
+            recordEndorsement(senderID, receiverID, serverID)
+            interaction.reply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
+            if ((currentVotes + 1) > (simpleMajority * numUsers)) {
+              try {
+                await interaction.options.getUser('user').roles.add(String(stats.generalRoleID))
+              }
+              catch (error) {
+                interaction.options.getUser('user').send('Unable to assign general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
+              }
+              initUser(receiverID, serverID, stats.income)
+              interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
+              interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the ' + serverDisplayName + ' group!')
+            } 
+        }
+      } else if (interaction.commandName === 'send') {
             const receiverID = interaction.options.getUser('user').id
-            if (await userExists(senderID, serverID) && await userExists(interaction.options.getUser('user').id, serverID)) {
+            if (await userExists(senderID, serverID) && await userExists(receiverID, serverID)) {
               const senderCurrentBalance = await getUserBalance(senderID, serverID)
               const receiverCurrentBalance = await getUserBalance(receiverID, serverID)
               const amount = prettyDecimal(interaction.options.getNumber('amount'))
@@ -471,7 +535,7 @@ client.on('interactionCreate', async (interaction) => {
         interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + volume + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
        }
     } else {
-        interaction.reply({content: "Please initiate your account by typing '/join'", ephemeral: true})
+        interaction.reply({content: "Please request to join the group by typing '/join' if you have not already", ephemeral: true})
       }
     } else {
       interaction.reply({content: 'Server settings have not been setup yet. Contact server admin!', ephemeral: true})
@@ -492,7 +556,8 @@ export async function main() {
     UpdateCommand,
     SettingsCommand,
     MyVoteCommand,
-    StatsCommand
+    StatsCommand,
+    EndorseCommand
   ];
 
     try {

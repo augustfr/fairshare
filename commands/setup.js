@@ -13,7 +13,7 @@ const setupCommand = new SlashCommandBuilder()
             .setRequired(true))
     .addRoleOption(option =>
 		option.setName('general_role')
-            .setDescription('The role assigned to each member when they join')
+            .setDescription('The role assigned to members once they are accepted')
             .setRequired(true))
     .addStringOption(option =>
         option.setName('symbol')
