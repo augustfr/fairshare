@@ -259,6 +259,22 @@ async function clearVotes(serverID) {
   .eq('serverID', serverID)
 }
 
+async function clearEndorsements(receiverID, serverID) {
+  const { error } = await supabase 
+  .from('endorsements')
+  .delete()
+  .eq('serverID', serverID)
+  .eq('receiverID', receiverID)
+}
+
+async function clearRequest(userID, serverID) {
+  const { error } = await supabase 
+  .from('joinRequests')
+  .delete()
+  .eq('userID', userID)
+  .eq('serverID', serverID)
+}
+
 async function tally(serverID) {
   const { data, error } = await supabase
   .from('votes')
@@ -408,6 +424,8 @@ client.on('interactionCreate', async (interaction) => {
                 interaction.options.getUser('user').send('Unable to assign general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
               }
               initUser(receiverID, serverID, stats.income)
+              clearEndorsements(receiverID, serverID)
+              clearRequest(receiverID, serverID)
               interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
               interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the ' + serverDisplayName + ' group!')
             } 
