@@ -21,6 +21,7 @@ import SettingsCommand from './commands/settings.js';
 import MyVoteCommand from './commands/myVote.js';
 import StatsCommand from './commands/stats.js';
 import EndorseCommand from './commands/endorse.js';
+import CandidatesCommand from './commands/candidates.js';
 
 config();
 
@@ -298,6 +299,14 @@ async function tally(serverID) {
   return [{fee: median(fee), income: median(income), length: fee.length}]
 }
 
+async function viewCandidates(serverID) {
+  const { data, error } = await supabase
+  .from('joinRequests')
+  .select('userID')
+  .eq('serverID', serverID)
+  return data
+}
+
 async function moneySupply(serverID) {
   const { data, error } = await supabase
   .from('balances')
@@ -421,70 +430,70 @@ client.on('interactionCreate', async (interaction) => {
             const balance = await getUserBalance(senderID, serverID)
             interaction.reply({content: 'Your current balance: ' + symbol + balance, ephemeral: true})
         } else if (interaction.commandName === 'endorse') {
-          const receiverID = interaction.options.getUser('user').id
-          if (await hasRequested(receiverID, serverID)) {
-            if (await alreadyEndorsed(senderID, receiverID, serverID)) {
-              interaction.reply({content: 'You have already endorsed <@' + receiverID + '>!', ephemeral: true})
-            } else {
-              const currentVotes = await getUserEndorsements(receiverID, serverID)
-              const numUsers = (await getUsers(serverID)).length
-              addEndorsement(receiverID, serverID, currentVotes + 1)
-              recordEndorsement(senderID, receiverID, serverID)
-              interaction.reply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
-              if (((currentVotes + 1) > (simpleMajority * numUsers)) || (numUsers === 2 && currentVotes > 1)) {
-                try {
-                  await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.add(String(stats.generalRoleID)).catch((err) => {console.log(err)});
-                }
-                catch (error) {
-                  interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
-                }
-                initUser(receiverID, serverID, stats.income)
-                await clearEndorsements(receiverID, serverID)
-                clearRequest(receiverID, serverID)
-                interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
-                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the ' + serverDisplayName + ' group!')
-              } 
-          }
-        } else {
-          interaction.reply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
-        }
-      } else if (interaction.commandName === 'send') {
             const receiverID = interaction.options.getUser('user').id
-            if (await userExists(senderID, serverID) && await userExists(receiverID, serverID)) {
-              const senderCurrentBalance = await getUserBalance(senderID, serverID)
-              const receiverCurrentBalance = await getUserBalance(receiverID, serverID)
-              const amount = prettyDecimal(interaction.options.getNumber('amount'))
-              const fee = prettyDecimal((amount * (stats.fee / 100)))
-              const amountWithFee = prettyDecimal((amount + fee))
-              if (senderCurrentBalance - amountWithFee < 0) {
-                interaction.reply({content: 'You currently have ' + symbol + senderCurrentBalance + ', but ' + symbol + amountWithFee + ' is needed to send the ' + symbol + amount + ' with the ' + symbol + fee + ' transaction fee.', ephemeral: true})
+            if (await hasRequested(receiverID, serverID)) {
+              if (await alreadyEndorsed(senderID, receiverID, serverID)) {
+                interaction.reply({content: 'You have already endorsed <@' + receiverID + '>!', ephemeral: true})
               } else {
-                  updateBalance(senderID, serverID, senderCurrentBalance - amountWithFee)
-                  updateBalance(receiverID, serverID, receiverCurrentBalance + amount)
-                  transactionLog(serverID, senderID, receiverID, amount, fee)
-                  await interaction.reply({content: 'Sent ' + symbol + amount + ' to <@' + receiverID + '>, and a ' + symbol + fee + ' transaction fee was taken, totalling to ' + symbol + amountWithFee, ephemeral: true})
-                  interaction.options.getUser('user').send('<@' + senderID + '> has sent you ' + symbol + amount + ' in the ' + serverDisplayName + ' group').catch((err) => {
-                    if (stats.feedChannel === null || stats.feedChannel === '') {
-                      interaction.followUp({content: 'The transaction was successfully sent but <@' + receiverID + '> is unable to receive DMs and the feed channel is turned off for this group.\n\nThis means <@' + receiverID + '> has no way of being notified of this transaction. Just a heads up!', ephemeral: true})
-                    }
-                  })
-                  if (stats.feedChannel !== null && stats.feedChannel !== '') {
-                    try {
-                      if (interaction.options.getString('message') !== null) {
-                        interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '> for ' + interaction.options.getString('message'))
-                      } else {
-                        interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '>')
-                      }
-                    } catch (error) {
-                      interaction.followUp({content: 'Transaction was successfully sent but is unable to be sent into the assigned feed channel. Let server admin know.', ephemeral: true})
-                    } 
+                const currentVotes = await getUserEndorsements(receiverID, serverID)
+                const numUsers = (await getUsers(serverID)).length
+                addEndorsement(receiverID, serverID, currentVotes + 1)
+                recordEndorsement(senderID, receiverID, serverID)
+                interaction.reply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
+                if (((currentVotes + 1) > (simpleMajority * numUsers)) || (numUsers === 2 && currentVotes > 1)) {
+                  try {
+                    await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.add(String(stats.generalRoleID)).catch((err) => {console.log(err)});
                   }
-                }
-            } else if (receiverID === senderID) {
-              interaction.reply({content: 'You cannot send to yourself!', ephemeral: true})
-            } else {
-              interaction.reply({content: '<@' + receiverID + "> has not joined the group. They can join with '/join'" , ephemeral: true})
+                  catch (error) {
+                    interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
+                  }
+                  initUser(receiverID, serverID, stats.income)
+                  await clearEndorsements(receiverID, serverID)
+                  clearRequest(receiverID, serverID)
+                  interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
+                  interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the ' + serverDisplayName + ' group!')
+                } 
             }
+          } else {
+            interaction.reply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
+          }
+      } else if (interaction.commandName === 'send') {
+          const receiverID = interaction.options.getUser('user').id
+          if (await userExists(senderID, serverID) && await userExists(receiverID, serverID)) {
+            const senderCurrentBalance = await getUserBalance(senderID, serverID)
+            const receiverCurrentBalance = await getUserBalance(receiverID, serverID)
+            const amount = prettyDecimal(interaction.options.getNumber('amount'))
+            const fee = prettyDecimal((amount * (stats.fee / 100)))
+            const amountWithFee = prettyDecimal((amount + fee))
+            if (senderCurrentBalance - amountWithFee < 0) {
+              interaction.reply({content: 'You currently have ' + symbol + senderCurrentBalance + ', but ' + symbol + amountWithFee + ' is needed to send the ' + symbol + amount + ' with the ' + symbol + fee + ' transaction fee.', ephemeral: true})
+            } else {
+                updateBalance(senderID, serverID, senderCurrentBalance - amountWithFee)
+                updateBalance(receiverID, serverID, receiverCurrentBalance + amount)
+                transactionLog(serverID, senderID, receiverID, amount, fee)
+                await interaction.reply({content: 'Sent ' + symbol + amount + ' to <@' + receiverID + '>, and a ' + symbol + fee + ' transaction fee was taken, totalling to ' + symbol + amountWithFee, ephemeral: true})
+                interaction.options.getUser('user').send('<@' + senderID + '> has sent you ' + symbol + amount + ' in the ' + serverDisplayName + ' group').catch((err) => {
+                  if (stats.feedChannel === null || stats.feedChannel === '') {
+                    interaction.followUp({content: 'The transaction was successfully sent but <@' + receiverID + '> is unable to receive DMs and the feed channel is turned off for this group.\n\nThis means <@' + receiverID + '> has no way of being notified of this transaction. Just a heads up!', ephemeral: true})
+                  }
+                })
+                if (stats.feedChannel !== null && stats.feedChannel !== '') {
+                  try {
+                    if (interaction.options.getString('message') !== null) {
+                      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '> for ' + interaction.options.getString('message'))
+                    } else {
+                      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '>')
+                    }
+                  } catch (error) {
+                    interaction.followUp({content: 'Transaction was successfully sent but is unable to be sent into the assigned feed channel. Let server admin know.', ephemeral: true})
+                  } 
+                }
+              }
+          } else if (receiverID === senderID) {
+            interaction.reply({content: 'You cannot send to yourself!', ephemeral: true})
+          } else {
+            interaction.reply({content: '<@' + receiverID + "> has not joined the group. They can join with '/join'" , ephemeral: true})
+          }
         } else if (interaction.commandName === 'vote') {
             if (stats.voteOpen) {
               if (interaction.options.getNumber('fee') > 100) {
@@ -533,56 +542,67 @@ client.on('interactionCreate', async (interaction) => {
             interaction.reply({content: 'Must be server admin', ephemeral: true})
           }
       } else if (interaction.commandName === 'update') {
-        if (interaction.member.roles.cache.has(stats.adminRoleID)) {
-          if (interaction.options.getRole('general_role') !== null) {
-            try {
-              if (interaction.member.roles.cache.has(interaction.options.getRole('general_role').id)) {
-                await interaction.member.roles.add(interaction.options.getRole('general_role'))
-              } else {
-                await interaction.member.roles.add(interaction.options.getRole('general_role'))
-                await interaction.member.roles.remove(interaction.options.getRole('general_role'))
-              }
-            } catch (error) {
-              interaction.reply({content: 'Please make sure the bot role is above the general role you just set (it currently is not).\n\nTo do this, go to Server Settings --> Roles and then drag the role for this bot to be above the <@&' + interaction.options.getRole('general_role') + '> role.\n\nOnce fixed, come back and run the update command again.' , ephemeral: true});
-              return
-            } 
-          }
-          await updateServer(serverID, interaction.options.getRole('general_role'), interaction.options.getString('symbol'), interaction.options.getChannel('feed_channel'), interaction.options.getBoolean('remove_feed'))
-          const updatedStats = await getServerStats(serverID)
-          if (updatedStats.feedChannel === null) {
-            interaction.reply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: None', ephemeral: true})
+          if (interaction.member.roles.cache.has(stats.adminRoleID)) {
+            if (interaction.options.getRole('general_role') !== null) {
+              try {
+                if (interaction.member.roles.cache.has(interaction.options.getRole('general_role').id)) {
+                  await interaction.member.roles.add(interaction.options.getRole('general_role'))
+                } else {
+                  await interaction.member.roles.add(interaction.options.getRole('general_role'))
+                  await interaction.member.roles.remove(interaction.options.getRole('general_role'))
+                }
+              } catch (error) {
+                interaction.reply({content: 'Please make sure the bot role is above the general role you just set (it currently is not).\n\nTo do this, go to Server Settings --> Roles and then drag the role for this bot to be above the <@&' + interaction.options.getRole('general_role') + '> role.\n\nOnce fixed, come back and run the update command again.' , ephemeral: true});
+                return
+              } 
+            }
+            await updateServer(serverID, interaction.options.getRole('general_role'), interaction.options.getString('symbol'), interaction.options.getChannel('feed_channel'), interaction.options.getBoolean('remove_feed'))
+            const updatedStats = await getServerStats(serverID)
+            if (updatedStats.feedChannel === null) {
+              interaction.reply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: None', ephemeral: true})
+            } else {
+              interaction.reply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: <#' + updatedStats.feedChannel + '>', ephemeral: true})
+            }
           } else {
-            interaction.reply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: <#' + updatedStats.feedChannel + '>', ephemeral: true})
+            interaction.reply({content: 'Must be server admin', ephemeral: true})
           }
-        } else {
-          interaction.reply({content: 'Must be server admin', ephemeral: true})
-        }
       } else if (interaction.commandName === 'settings') {
-        if (stats.feedChannel === null) {
-          interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: None', ephemeral: true})
-        } else {
-          interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: <#' + stats.feedChannel + '>', ephemeral: true})
-        }     
+          if (stats.feedChannel === null) {
+            interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: None', ephemeral: true})
+          } else {
+            interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: <#' + stats.feedChannel + '>', ephemeral: true})
+          }     
        } else if (interaction.commandName === 'my_vote') {
-        const myVote = await checkMyVote(senderID, serverID)
-        if ((myVote[0].fee).length === 0) {
-          interaction.reply({content: "You haven't voted in the current round. Submit a vote with '/vote'", ephemeral: true})
-        } else {
-          interaction.reply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a ' + symbol + myVote[0].income + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
-        }
+          const myVote = await checkMyVote(senderID, serverID)
+          if ((myVote[0].fee).length === 0) {
+            interaction.reply({content: "You haven't voted in the current round. Submit a vote with '/vote'", ephemeral: true})
+          } else {
+            interaction.reply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a ' + symbol + myVote[0].income + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
+          }
        } else if (interaction.commandName === 'stats') {
-        const currentDate = Date.now();
-        const volume = await getVolume(serverID, currentDate - 604800000, currentDate)
-        const gini = roundUp(await computeGiniIndex(serverID))
-        const numUsers = (await getUsers(serverID)).length
-        const serverMoneySupply = await moneySupply(serverID)
-        interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + volume + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
+          const currentDate = Date.now();
+          const volume = await getVolume(serverID, currentDate - 604800000, currentDate)
+          const gini = roundUp(await computeGiniIndex(serverID))
+          const numUsers = (await getUsers(serverID)).length
+          const serverMoneySupply = await moneySupply(serverID)
+          interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + volume + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
+       } else if (interaction.commandName === 'candidates') {
+          const candidates = await viewCandidates(serverID)
+          let message = 'Current candidates:\n\n'
+          if (candidates.length === 0) {
+            interaction.reply({content: "There are no current candidates for this group", ephemeral: true})
+          } else {
+            for (let i = 0; i < candidates.length; i += 1) {
+              message += ('<@' + candidates[i].userID + '>\n')
+            }
+            interaction.reply({content: message, ephemeral: true})
+          }
        }
     } else {
         interaction.reply({content: "Please request to join the group by typing '/join' if you have not already", ephemeral: true})
       }
     } else {
-      interaction.reply({content: 'Server settings have not been setup yet. Contact server admin!', ephemeral: true})
+        interaction.reply({content: 'Server settings have not been setup yet. Contact server admin!', ephemeral: true})
     }    
 }});
 
@@ -600,7 +620,8 @@ export async function main() {
     SettingsCommand,
     MyVoteCommand,
     StatsCommand,
-    EndorseCommand
+    EndorseCommand,
+    CandidatesCommand
   ];
 
     try {
@@ -622,7 +643,6 @@ export async function main() {
   client.login(TOKEN);
 
 }
-
 
 main()
 runPayments()
