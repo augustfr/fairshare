@@ -16,7 +16,6 @@ import SetupCommand from './commands/setup.js';
 import VoteCommand from './commands/vote.js';
 import TallyCommand from './commands/tally.js';
 import RatesCommand from './commands/rates.js';
-import AcceptVoteCommand from './commands/acceptVotes.js';
 import UpdateCommand from './commands/update.js';
 import SettingsCommand from './commands/settings.js';
 import MyVoteCommand from './commands/myVote.js';
@@ -135,6 +134,20 @@ async function initUser(userID, serverID, income) {
 async function userExists(userID, serverID) {
   const {data} = await supabase
   .from('balances')
+  .select('serverID')
+  .eq('userID', userID)
+  .eq('serverID', serverID)
+  .single()
+  if(data !== null) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+async function hasRequested(userID, serverID) {
+  const {data} = await supabase
+  .from('joinRequests')
   .select('serverID')
   .eq('userID', userID)
   .eq('serverID', serverID)
@@ -380,6 +393,7 @@ client.on('interactionCreate', async (interaction) => {
             interaction.reply({content: 'Please make sure the bot role is above the general role you just set (it currently is not).\n\nTo do this, go to Server Settings --> Roles and then drag the role for this bot to be above the <@&' + interaction.options.getRole('general_role') + '> role.\n\nOnce fixed, come back and run the setup command again.' , ephemeral: true});
             return
           } 
+          initUser(senderID, serverID, interaction.options.getNumber('income'))
           if (interaction.options.getChannel('feed_channel') !== null) {
             setServerStats(serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'), interaction.options.getRole('general_role'),  interaction.options.getString('symbol'), interaction.options.getChannel('feed_channel'))
           } else {
@@ -408,27 +422,31 @@ client.on('interactionCreate', async (interaction) => {
             interaction.reply({content: 'Your current balance: ' + symbol + balance, ephemeral: true})
         } else if (interaction.commandName === 'endorse') {
           const receiverID = interaction.options.getUser('user').id
-          if (await alreadyEndorsed(senderID, receiverID, serverID)) {
-            interaction.reply({content: 'You have already endorsed <@' + receiverID + '>!', ephemeral: true})
-          } else {
-            const currentVotes = await getUserEndorsements(receiverID, serverID)
-            const numUsers = (await getUsers(serverID)).length
-            addEndorsement(receiverID, serverID, currentVotes + 1)
-            recordEndorsement(senderID, receiverID, serverID)
-            interaction.reply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
-            if ((currentVotes + 1) > (simpleMajority * numUsers)) {
-              try {
-                await interaction.options.getUser('user').roles.add(String(stats.generalRoleID))
-              }
-              catch (error) {
-                interaction.options.getUser('user').send('Unable to assign general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
-              }
-              initUser(receiverID, serverID, stats.income)
-              clearEndorsements(receiverID, serverID)
-              clearRequest(receiverID, serverID)
-              interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
-              interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the ' + serverDisplayName + ' group!')
-            } 
+          if (await hasRequested(receiverID, serverID)) {
+            if (await alreadyEndorsed(senderID, receiverID, serverID)) {
+              interaction.reply({content: 'You have already endorsed <@' + receiverID + '>!', ephemeral: true})
+            } else {
+              const currentVotes = await getUserEndorsements(receiverID, serverID)
+              const numUsers = (await getUsers(serverID)).length
+              addEndorsement(receiverID, serverID, currentVotes + 1)
+              recordEndorsement(senderID, receiverID, serverID)
+              interaction.reply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
+              if (((currentVotes + 1) > (simpleMajority * numUsers)) || (numUsers === 2 && currentVotes > 1)) {
+                try {
+                  await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.add(String(stats.generalRoleID)).catch((err) => {console.log(err)});
+                }
+                catch (error) {
+                  interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
+                }
+                initUser(receiverID, serverID, stats.income)
+                await clearEndorsements(receiverID, serverID)
+                clearRequest(receiverID, serverID)
+                interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
+                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the ' + serverDisplayName + ' group!')
+              } 
+          }
+        } else {
+          interaction.reply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
         }
       } else if (interaction.commandName === 'send') {
             const receiverID = interaction.options.getUser('user').id
@@ -472,12 +490,20 @@ client.on('interactionCreate', async (interaction) => {
               if (interaction.options.getNumber('fee') > 100) {
                 interaction.reply({content: 'Fee cannot be greater than 100%!', ephemeral: true})
               } else {
+                const numUsers = (await getUsers(serverID)).length
+                const votes = await tally(serverID)
                 if (await userVoted(senderID, serverID)) {
                   updateVote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
                   interaction.reply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been updated!', ephemeral: true})
                 } else {
-                  vote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
-                  interaction.reply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been recorded!', ephemeral: true})
+                  if ((votes[0].length + 1) > (superMajority * numUsers)) {
+                    acceptVotes(serverID, votes[0].fee, votes[0].income)
+                    clearVotes(serverID)
+                    interaction.reply({content: 'Your vote has reached a super majority and the votes have been accepted!\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' +  symbol + votes[0].income + ' daily income', ephemeral: true})
+                  } else {
+                    vote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
+                    interaction.reply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been recorded!', ephemeral: true})
+                  }
                 }
               }
             } else {
@@ -570,7 +596,6 @@ export async function main() {
     VoteCommand,
     TallyCommand,
     RatesCommand,
-    AcceptVoteCommand,
     UpdateCommand,
     SettingsCommand,
     MyVoteCommand,
