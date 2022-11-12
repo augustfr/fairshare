@@ -595,6 +595,7 @@ client.on('interactionCreate', async (interaction) => {
             for (let i = 0; i < candidates.length; i += 1) {
               message += ('<@' + candidates[i].userID + '>\n')
             }
+            message += "\nUse '/endorse' to endorse any of the above candidates!"
             interaction.reply({content: message, ephemeral: true})
           }
        }
