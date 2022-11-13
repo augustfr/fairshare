@@ -22,6 +22,7 @@ import MyVoteCommand from './commands/myVote.js';
 import StatsCommand from './commands/stats.js';
 import EndorseCommand from './commands/endorse.js';
 import CandidatesCommand from './commands/candidates.js';
+import StrikeCommand from './commands/strike.js';
 
 config();
 
@@ -173,6 +174,20 @@ async function userVoted(userID, serverID) {
   }
 }
 
+async function strikeAlreadyGiven(senderID, receiverID, serverID) {
+  const {data} = await supabase
+  .from('strikes')
+  .select()
+  .eq('senderID', senderID)
+  .eq('serverID', serverID)
+  .eq('receiverID', receiverID)
+  if (data === null || data.length === 0) {
+    return false
+  } else {
+    return true
+  }
+}
+
 export async function getUserBalance(userID, serverID) {
   const { data, error } = await supabase
   .from('balances')
@@ -251,6 +266,29 @@ async function vote(userID, serverID, fee, income) {
   .insert({ userID: userID, serverID: serverID, fee: fee, income: income})
 }
 
+async function addStrike(receiverID, serverID, strikeCount) {
+  const { error } = await supabase
+  .from('balances')
+  .update({ strikes: strikeCount})
+  .eq('userID', receiverID)
+  .eq('serverID', serverID)
+}
+
+async function recordStrike(senderID, receiverID, serverID) {
+  const { error } = await supabase
+  .from('strikes')
+  .insert({ senderID: senderID, receiverID: receiverID, serverID: serverID})
+}
+
+async function getStrikes(userID, serverID) {
+  const { data, error } = await supabase
+  .from('balances')
+  .select('strikes')
+  .eq('serverID', serverID)
+  .eq('userID', userID)
+  return data[0].strikes
+}
+
 async function updateVote(userID, serverID, fee, income) {
   const { error } = await supabase
   .from('votes')
@@ -271,6 +309,22 @@ async function clearVotes(serverID) {
   .from('votes')
   .delete()
   .eq('serverID', serverID)
+}
+
+async function clearStrikes(userID, serverID) {
+  const { error } = await supabase 
+  .from('strikes')
+  .delete()
+  .eq('serverID', serverID)
+  .eq('receiverID', userID)
+}
+
+async function terminateUser(userID, serverID) {
+  const { error } = await supabase 
+  .from('balances')
+  .delete()
+  .eq('serverID', serverID)
+  .eq('userID', userID)
 }
 
 async function clearEndorsements(receiverID, serverID) {
@@ -598,6 +652,28 @@ client.on('interactionCreate', async (interaction) => {
             message += "\nUse '/endorse' to endorse any of the above candidates!"
             interaction.reply({content: message, ephemeral: true})
           }
+       } else if (interaction.commandName === 'strike') {
+        const receiverID = interaction.options.getUser('user').id
+        if (await userExists(receiverID, serverID)) {
+          if (await strikeAlreadyGiven(senderID, receiverID, serverID)) {
+            interaction.reply({content: 'You have already given a strike to <@' + receiverID + '>', ephemeral: true})
+          } else {
+            const numUsers = (await getUsers(serverID)).length
+            const strikes = await getStrikes(receiverID, serverID)
+            addStrike(receiverID, serverID, strikes + 1)
+            recordStrike(senderID, receiverID, serverID)
+            if ((strikes + 1) > (superMajority * numUsers)) {
+              terminateUser(receiverID, serverID)
+              clearStrikes(receiverID, serverID)
+              await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.remove(String(stats.generalRoleID)).catch((err) => {console.log(err)});
+              interaction.reply({content: 'You have successfully given a strike to <@' + receiverID + '> which has voted them out of the group', ephemeral: true})
+            } else {
+              interaction.reply({content: 'You have successfully given a strike to <@' + receiverID + '>', ephemeral: true})
+            }
+          }
+        } else {
+          interaction.reply({content: '<@' + receiverID + '> is not in this group', ephemeral: true})
+        }
        }
     } else {
         interaction.reply({content: "Please request to join the group by typing '/join' if you have not already", ephemeral: true})
@@ -622,7 +698,8 @@ export async function main() {
     MyVoteCommand,
     StatsCommand,
     EndorseCommand,
-    CandidatesCommand
+    CandidatesCommand,
+    StrikeCommand
   ];
 
     try {
