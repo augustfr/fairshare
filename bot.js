@@ -482,9 +482,11 @@ client.on('ready', () => console.log(`${client.user.tag} has logged in!`));
 
 client.on('interactionCreate', async (interaction) => {
   if (interaction.isChatInputCommand()) {
+    const senderID = interaction.user.id
+    const senderDisplayName = interaction.user.username
     if (interaction.guildId == null) {
+      console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' via DM")
       if (interaction.commandName === 'balance') {
-        const senderID = interaction.user.id
         const balance = await getUserGlobalStats(senderID)
         if (balance.length === 0) {
           interaction.reply({content: "You are not in any groups. Go to a group's server and use '/join'", ephemeral: true})
@@ -506,9 +508,7 @@ client.on('interactionCreate', async (interaction) => {
         interaction.reply({content: "Only the '/balance' command works in DMs for now. Please go to your individual group to use the other commands.", ephemeral: true})
       }
     } else {
-      const senderDisplayName = interaction.member.displayName
       const serverDisplayName = interaction.guild.name
-      const senderID = interaction.member.id
       const serverID = interaction.guildId
       const stats = await getServerStats(serverID)
       console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' in " + serverDisplayName + ' (' + serverID + ')')
