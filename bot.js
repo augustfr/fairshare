@@ -23,6 +23,8 @@ import StatsCommand from './commands/stats.js';
 import EndorseCommand from './commands/endorse.js';
 import CandidatesCommand from './commands/candidates.js';
 import StrikeCommand from './commands/strike.js';
+import RecentCommand from './commands/recent.js';
+
 
 config();
 
@@ -408,6 +410,46 @@ async function getVolume(serverID, startDate, endDate) {
   return volume
 }
 
+async function getUserSentTransactions(userID, serverID, startDate, endDate) {
+  const { data, error } = await supabase
+  .from('transactions')
+  .select()
+  .eq('serverID', serverID)
+  .eq('senderID', userID)
+  const dates = data.map(a => a.date)
+  const amounts = data.map(a => a.amount)
+  const receiver = data.map(a => a.receiverID)
+  let result = []
+  for (let i = 0; i < dates.length; i += 1) {
+    const transactionDate = new Date(dates[i]).getTime()
+    if ((startDate < transactionDate) && (transactionDate < endDate)) {
+      const transaction = {userID: receiver[i], amount: amounts[i]}
+      result.push(transaction)
+    }
+  }
+  return result
+}
+
+async function getUserReceivedTransactions(userID, serverID, startDate, endDate) {
+  const { data, error } = await supabase
+  .from('transactions')
+  .select()
+  .eq('serverID', serverID)
+  .eq('receiverID', userID)
+  const dates = data.map(a => a.date)
+  const amounts = data.map(a => a.amount)
+  const sender = data.map(a => a.senderID)
+  let result = []
+  for (let i = 0; i < dates.length; i += 1) {
+    const transactionDate = new Date(dates[i]).getTime()
+    if ((startDate < transactionDate) && (transactionDate < endDate)) {
+      const transaction = {userID: sender[i], amount: amounts[i]}
+      result.push(transaction)
+    }
+  }
+  return result
+}
+
 async function transactionLog(serverID, userID, receiverID, amount, fee) {
   const currentDate = new Date();
   const { error } = await supabase
@@ -470,188 +512,188 @@ client.on('interactionCreate', async (interaction) => {
         interaction.reply({content: 'Must be server admin', ephemeral: true})
       }
     } else if (stats.symbol !== null) {
-        const symbol = stats.symbol
-        if (interaction.commandName === 'join') {
-          if (await userExists(senderID, serverID)) {
-            interaction.reply({content: 'You are already in this group', ephemeral: true})
-          } else {
-              requestToJoin(senderID, serverID)
-              interaction.reply({content: 'You have successfully requested to join the ' + serverDisplayName + ' group!', ephemeral: true})
-              interaction.member.send('You have successfully requested to join the ' + serverDisplayName + ' group!').catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you if you are accepted!', ephemeral: true})});
-          }
+      const symbol = stats.symbol
+      if (interaction.commandName === 'join') {
+        if (await userExists(senderID, serverID)) {
+          interaction.reply({content: 'You are already in this group', ephemeral: true})
+        } else {
+            requestToJoin(senderID, serverID)
+            interaction.reply({content: 'You have successfully requested to join the ' + serverDisplayName + ' group!', ephemeral: true})
+            interaction.member.send('You have successfully requested to join the ' + serverDisplayName + ' group!').catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you if you are accepted!', ephemeral: true})});
+        }
       } else if (await userExists(senderID, serverID)) {
-          if (interaction.commandName === 'balance') {
-            const balance = await getUserBalance(senderID, serverID)
-            interaction.reply({content: 'Your current balance: ' + symbol + balance, ephemeral: true})
+        if (interaction.commandName === 'balance') {
+          const balance = await getUserBalance(senderID, serverID)
+          interaction.reply({content: 'Your current balance: ' + symbol + balance, ephemeral: true})
         } else if (interaction.commandName === 'endorse') {
-            const receiverID = interaction.options.getUser('user').id
-            if (await hasRequested(receiverID, serverID)) {
-              if (await alreadyEndorsed(senderID, receiverID, serverID)) {
-                interaction.reply({content: 'You have already endorsed <@' + receiverID + '>!', ephemeral: true})
-              } else {
-                const currentVotes = await getUserEndorsements(receiverID, serverID)
-                const numUsers = (await getUsers(serverID)).length
-                addEndorsement(receiverID, serverID, currentVotes + 1)
-                recordEndorsement(senderID, receiverID, serverID)
-                interaction.reply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
-                if (((currentVotes + 1) > (simpleMajority * numUsers)) || (numUsers === 2 && currentVotes > 1)) {
-                  try {
-                    await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.add(String(stats.generalRoleID)).catch((err) => {console.log(err)});
-                  }
-                  catch (error) {
-                    interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
-                  }
-                  initUser(receiverID, serverID, stats.income)
-                  await clearEndorsements(receiverID, serverID)
-                  clearRequest(receiverID, serverID)
-                  interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
-                  interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the ' + serverDisplayName + ' group!')
-                } 
-            }
-          } else {
-            interaction.reply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
-          }
-      } else if (interaction.commandName === 'send') {
           const receiverID = interaction.options.getUser('user').id
-          if (await userExists(senderID, serverID) && await userExists(receiverID, serverID)) {
-            const senderCurrentBalance = await getUserBalance(senderID, serverID)
-            const receiverCurrentBalance = await getUserBalance(receiverID, serverID)
-            const amount = prettyDecimal(interaction.options.getNumber('amount'))
-            const fee = prettyDecimal((amount * (stats.fee / 100)))
-            const amountWithFee = prettyDecimal((amount + fee))
-            if (senderCurrentBalance - amountWithFee < 0) {
-              interaction.reply({content: 'You currently have ' + symbol + senderCurrentBalance + ', but ' + symbol + amountWithFee + ' is needed to send the ' + symbol + amount + ' with the ' + symbol + fee + ' transaction fee.', ephemeral: true})
+          if (await hasRequested(receiverID, serverID)) {
+            if (await alreadyEndorsed(senderID, receiverID, serverID)) {
+              interaction.reply({content: 'You have already endorsed <@' + receiverID + '>!', ephemeral: true})
             } else {
-                updateBalance(senderID, serverID, senderCurrentBalance - amountWithFee)
-                updateBalance(receiverID, serverID, receiverCurrentBalance + amount)
-                transactionLog(serverID, senderID, receiverID, amount, fee)
-                await interaction.reply({content: 'Sent ' + symbol + amount + ' to <@' + receiverID + '>, and a ' + symbol + fee + ' transaction fee was taken, totalling to ' + symbol + amountWithFee, ephemeral: true})
-                interaction.options.getUser('user').send('<@' + senderID + '> has sent you ' + symbol + amount + ' in the ' + serverDisplayName + ' group').catch((err) => {
-                  if (stats.feedChannel === null || stats.feedChannel === '') {
-                    interaction.followUp({content: 'The transaction was successfully sent but <@' + receiverID + '> is unable to receive DMs and the feed channel is turned off for this group.\n\nThis means <@' + receiverID + '> has no way of being notified of this transaction. Just a heads up!', ephemeral: true})
-                  }
-                })
-                if (stats.feedChannel !== null && stats.feedChannel !== '') {
-                  try {
-                    if (interaction.options.getString('message') !== null) {
-                      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '> for ' + interaction.options.getString('message'))
-                    } else {
-                      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '>')
-                    }
-                  } catch (error) {
-                    interaction.followUp({content: 'Transaction was successfully sent but is unable to be sent into the assigned feed channel. Let server admin know.', ephemeral: true})
-                  } 
+              const currentVotes = await getUserEndorsements(receiverID, serverID)
+              const numUsers = (await getUsers(serverID)).length
+              addEndorsement(receiverID, serverID, currentVotes + 1)
+              recordEndorsement(senderID, receiverID, serverID)
+              interaction.reply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
+              if (((currentVotes + 1) > (simpleMajority * numUsers)) || (numUsers === 2 && currentVotes > 1)) {
+                try {
+                  await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.add(String(stats.generalRoleID)).catch((err) => {console.log(err)});
                 }
-              }
-          } else if (receiverID === senderID) {
-            interaction.reply({content: 'You cannot send to yourself!', ephemeral: true})
-          } else {
-            interaction.reply({content: '<@' + receiverID + "> has not joined the group. They can join with '/join'" , ephemeral: true})
+                catch (error) {
+                  interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
+                }
+                initUser(receiverID, serverID, stats.income)
+                await clearEndorsements(receiverID, serverID)
+                clearRequest(receiverID, serverID)
+                interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
+                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the ' + serverDisplayName + ' group!')
+              } 
           }
-        } else if (interaction.commandName === 'vote') {
-            if (stats.voteOpen) {
-              if (interaction.options.getNumber('fee') > 100) {
-                interaction.reply({content: 'Fee cannot be greater than 100%!', ephemeral: true})
-              } else {
-                const numUsers = (await getUsers(serverID)).length
-                const votes = await tally(serverID)
-                if (await userVoted(senderID, serverID)) {
-                  updateVote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
-                  interaction.reply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been updated!', ephemeral: true})
-                } else {
-                  if ((votes[0].length + 1) > (superMajority * numUsers)) {
-                    acceptVotes(serverID, votes[0].fee, votes[0].income)
-                    clearVotes(serverID)
-                    interaction.reply({content: 'Your vote has reached a super majority and the votes have been accepted!\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' +  symbol + votes[0].income + ' daily income', ephemeral: true})
+        } else {
+          interaction.reply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
+        }
+      } else if (interaction.commandName === 'send') {
+        const receiverID = interaction.options.getUser('user').id
+        if (await userExists(senderID, serverID) && await userExists(receiverID, serverID)) {
+          const senderCurrentBalance = await getUserBalance(senderID, serverID)
+          const receiverCurrentBalance = await getUserBalance(receiverID, serverID)
+          const amount = prettyDecimal(interaction.options.getNumber('amount'))
+          const fee = prettyDecimal((amount * (stats.fee / 100)))
+          const amountWithFee = prettyDecimal((amount + fee))
+          if (senderCurrentBalance - amountWithFee < 0) {
+            interaction.reply({content: 'You currently have ' + symbol + senderCurrentBalance + ', but ' + symbol + amountWithFee + ' is needed to send the ' + symbol + amount + ' with the ' + symbol + fee + ' transaction fee.', ephemeral: true})
+          } else {
+              updateBalance(senderID, serverID, senderCurrentBalance - amountWithFee)
+              updateBalance(receiverID, serverID, receiverCurrentBalance + amount)
+              transactionLog(serverID, senderID, receiverID, amount, fee)
+              await interaction.reply({content: 'Sent ' + symbol + amount + ' to <@' + receiverID + '>, and a ' + symbol + fee + ' transaction fee was taken, totalling to ' + symbol + amountWithFee, ephemeral: true})
+              interaction.options.getUser('user').send('<@' + senderID + '> has sent you ' + symbol + amount + ' in the ' + serverDisplayName + ' group').catch((err) => {
+                if (stats.feedChannel === null || stats.feedChannel === '') {
+                  interaction.followUp({content: 'The transaction was successfully sent but <@' + receiverID + '> is unable to receive DMs and the feed channel is turned off for this group.\n\nThis means <@' + receiverID + '> has no way of being notified of this transaction. Just a heads up!', ephemeral: true})
+                }
+              })
+              if (stats.feedChannel !== null && stats.feedChannel !== '') {
+                try {
+                  if (interaction.options.getString('message') !== null) {
+                    interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '> for ' + interaction.options.getString('message'))
                   } else {
-                    vote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
-                    interaction.reply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been recorded!', ephemeral: true})
+                    interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '>')
                   }
+                } catch (error) {
+                  interaction.followUp({content: 'Transaction was successfully sent but is unable to be sent into the assigned feed channel. Let server admin know.', ephemeral: true})
+                } 
+              }
+            }
+        } else if (receiverID === senderID) {
+          interaction.reply({content: 'You cannot send to yourself!', ephemeral: true})
+        } else {
+          interaction.reply({content: '<@' + receiverID + "> has not joined the group. They can join with '/join'" , ephemeral: true})
+        }
+        } else if (interaction.commandName === 'vote') {
+          if (stats.voteOpen) {
+            if (interaction.options.getNumber('fee') > 100) {
+              interaction.reply({content: 'Fee cannot be greater than 100%!', ephemeral: true})
+            } else {
+              const numUsers = (await getUsers(serverID)).length
+              const votes = await tally(serverID)
+              if (await userVoted(senderID, serverID)) {
+                updateVote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
+                interaction.reply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been updated!', ephemeral: true})
+              } else {
+                if ((votes[0].length + 1) > (superMajority * numUsers)) {
+                  acceptVotes(serverID, votes[0].fee, votes[0].income)
+                  clearVotes(serverID)
+                  interaction.reply({content: 'Your vote has reached a super majority and the votes have been accepted!\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' +  symbol + votes[0].income + ' daily income', ephemeral: true})
+                } else {
+                  vote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
+                  interaction.reply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been recorded!', ephemeral: true})
                 }
               }
-            } else {
-              interaction.reply({content: 'Voting is currently closed', ephemeral: true})
             }
+          } else {
+            interaction.reply({content: 'Voting is currently closed', ephemeral: true})
+          }
       } else if (interaction.commandName === 'tally') {
+        const votes = await tally(serverID)
+        if (isNaN(votes[0].fee)) {
+          interaction.reply({content: "No votes have been recorded yet. Try voting by typing '/vote'", ephemeral: true})
+        } else {
+          interaction.reply({content: votes[0].length + ' votes so far, result would be a ' + votes[0].fee + '% transaction fee and a ' + symbol + votes[0].income + ' daily income', ephemeral: true})
+        }
+      } else if (interaction.commandName === 'rates') {
+        interaction.reply({content: 'Current rates:\n' + stats.fee + '% transaction fee\n' +  symbol + stats.income + ' daily income', ephemeral: true})
+      } else if (interaction.commandName === 'accept_votes') {
+        if (interaction.member.roles.cache.has(stats.adminRoleID)) {
           const votes = await tally(serverID)
           if (isNaN(votes[0].fee)) {
-            interaction.reply({content: "No votes have been recorded yet. Try voting by typing '/vote'", ephemeral: true})
+            interaction.reply({content: 'No votes have been recorded.', ephemeral: true})
           } else {
-            interaction.reply({content: votes[0].length + ' votes so far, result would be a ' + votes[0].fee + '% transaction fee and a ' + symbol + votes[0].income + ' daily income', ephemeral: true})
-          }
-      } else if (interaction.commandName === 'rates') {
-          interaction.reply({content: 'Current rates:\n' + stats.fee + '% transaction fee\n' +  symbol + stats.income + ' daily income', ephemeral: true})
-      } else if (interaction.commandName === 'accept_votes') {
-          if (interaction.member.roles.cache.has(stats.adminRoleID)) {
             const votes = await tally(serverID)
-            if (isNaN(votes[0].fee)) {
-              interaction.reply({content: 'No votes have been recorded.', ephemeral: true})
-            } else {
-              const votes = await tally(serverID)
-              acceptVotes(serverID, votes[0].fee, votes[0].income)
-              clearVotes(serverID)
-              interaction.reply({content: votes[0].length + ' votes have been accepted and the new rates are now active.\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' +  symbol + votes[0].income + ' daily income', ephemeral: true})
-            }
-          } else {
-            interaction.reply({content: 'Must be server admin', ephemeral: true})
+            acceptVotes(serverID, votes[0].fee, votes[0].income)
+            clearVotes(serverID)
+            interaction.reply({content: votes[0].length + ' votes have been accepted and the new rates are now active.\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' +  symbol + votes[0].income + ' daily income', ephemeral: true})
           }
+        } else {
+          interaction.reply({content: 'Must be server admin', ephemeral: true})
+        }
       } else if (interaction.commandName === 'update') {
-          if (interaction.member.roles.cache.has(stats.adminRoleID)) {
-            if (interaction.options.getRole('general_role') !== null) {
-              try {
-                if (interaction.member.roles.cache.has(interaction.options.getRole('general_role').id)) {
-                  await interaction.member.roles.add(interaction.options.getRole('general_role'))
-                } else {
-                  await interaction.member.roles.add(interaction.options.getRole('general_role'))
-                  await interaction.member.roles.remove(interaction.options.getRole('general_role'))
-                }
-              } catch (error) {
-                interaction.reply({content: 'Please make sure the bot role is above the general role you just set (it currently is not).\n\nTo do this, go to Server Settings --> Roles and then drag the role for this bot to be above the <@&' + interaction.options.getRole('general_role') + '> role.\n\nOnce fixed, come back and run the update command again.' , ephemeral: true});
-                return
-              } 
-            }
-            await updateServer(serverID, interaction.options.getRole('general_role'), interaction.options.getString('symbol'), interaction.options.getChannel('feed_channel'), interaction.options.getBoolean('remove_feed'))
-            const updatedStats = await getServerStats(serverID)
-            if (updatedStats.feedChannel === null) {
-              interaction.reply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: None', ephemeral: true})
-            } else {
-              interaction.reply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: <#' + updatedStats.feedChannel + '>', ephemeral: true})
-            }
-          } else {
-            interaction.reply({content: 'Must be server admin', ephemeral: true})
+        if (interaction.member.roles.cache.has(stats.adminRoleID)) {
+          if (interaction.options.getRole('general_role') !== null) {
+            try {
+              if (interaction.member.roles.cache.has(interaction.options.getRole('general_role').id)) {
+                await interaction.member.roles.add(interaction.options.getRole('general_role'))
+              } else {
+                await interaction.member.roles.add(interaction.options.getRole('general_role'))
+                await interaction.member.roles.remove(interaction.options.getRole('general_role'))
+              }
+            } catch (error) {
+              interaction.reply({content: 'Please make sure the bot role is above the general role you just set (it currently is not).\n\nTo do this, go to Server Settings --> Roles and then drag the role for this bot to be above the <@&' + interaction.options.getRole('general_role') + '> role.\n\nOnce fixed, come back and run the update command again.' , ephemeral: true});
+              return
+            } 
           }
-      } else if (interaction.commandName === 'settings') {
-          if (stats.feedChannel === null) {
-            interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: None', ephemeral: true})
+          await updateServer(serverID, interaction.options.getRole('general_role'), interaction.options.getString('symbol'), interaction.options.getChannel('feed_channel'), interaction.options.getBoolean('remove_feed'))
+          const updatedStats = await getServerStats(serverID)
+          if (updatedStats.feedChannel === null) {
+            interaction.reply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: None', ephemeral: true})
           } else {
-            interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: <#' + stats.feedChannel + '>', ephemeral: true})
-          }     
-       } else if (interaction.commandName === 'my_vote') {
-          const myVote = await checkMyVote(senderID, serverID)
-          if ((myVote[0].fee).length === 0) {
-            interaction.reply({content: "You haven't voted in the current round. Submit a vote with '/vote'", ephemeral: true})
-          } else {
-            interaction.reply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a ' + symbol + myVote[0].income + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
+            interaction.reply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: <#' + updatedStats.feedChannel + '>', ephemeral: true})
           }
+        } else {
+          interaction.reply({content: 'Must be server admin', ephemeral: true})
+        }
+    } else if (interaction.commandName === 'settings') {
+      if (stats.feedChannel === null) {
+        interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: None', ephemeral: true})
+      } else {
+        interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: <#' + stats.feedChannel + '>', ephemeral: true})
+      }     
+      } else if (interaction.commandName === 'my_vote') {
+      const myVote = await checkMyVote(senderID, serverID)
+      if ((myVote[0].fee).length === 0) {
+        interaction.reply({content: "You haven't voted in the current round. Submit a vote with '/vote'", ephemeral: true})
+      } else {
+        interaction.reply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a ' + symbol + myVote[0].income + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
+      }
        } else if (interaction.commandName === 'stats') {
-          const currentDate = Date.now();
-          const volume = await getVolume(serverID, currentDate - 604800000, currentDate)
-          const gini = roundUp(await computeGiniIndex(serverID))
-          const numUsers = (await getUsers(serverID)).length
-          const serverMoneySupply = await moneySupply(serverID)
-          interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + volume + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
+        const currentDate = Date.now();
+        const volume = await getVolume(serverID, currentDate - 604800000, currentDate)
+        const gini = roundUp(await computeGiniIndex(serverID))
+        const numUsers = (await getUsers(serverID)).length
+        const serverMoneySupply = await moneySupply(serverID)
+        interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + volume + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
        } else if (interaction.commandName === 'candidates') {
-          const candidates = await viewCandidates(serverID)
-          let message = 'Current candidates:\n\n'
-          if (candidates.length === 0) {
-            interaction.reply({content: "There are no current candidates for this group", ephemeral: true})
-          } else {
-            for (let i = 0; i < candidates.length; i += 1) {
-              message += ('<@' + candidates[i].userID + '>\n')
-            }
-            message += "\nUse '/endorse' to endorse any of the above candidates!"
-            interaction.reply({content: message, ephemeral: true})
+        const candidates = await viewCandidates(serverID)
+        let message = 'Current candidates:\n\n'
+        if (candidates.length === 0) {
+          interaction.reply({content: "There are no current candidates for this group", ephemeral: true})
+        } else {
+          for (let i = 0; i < candidates.length; i += 1) {
+            message += ('<@' + candidates[i].userID + '>\n')
           }
+          message += "\nUse '/endorse' to endorse any of the above candidates!"
+          interaction.reply({content: message, ephemeral: true})
+        }
        } else if (interaction.commandName === 'strike') {
         const receiverID = interaction.options.getUser('user').id
         if (await userExists(receiverID, serverID)) {
@@ -674,7 +716,31 @@ client.on('interactionCreate', async (interaction) => {
         } else {
           interaction.reply({content: '<@' + receiverID + '> is not in this group', ephemeral: true})
         }
-       }
+       } else if (interaction.commandName === 'recent') {
+        const currentDate = Date.now();
+        const sent = await getUserSentTransactions(senderID, serverID, currentDate - 604800000, currentDate)
+        const received = await getUserReceivedTransactions(senderID, serverID, currentDate - 604800000, currentDate)
+        if ((sent.length === 0) && (received.length == 0)) {
+          interaction.reply({content: "You've had no transactions in the past week", ephemeral: true})
+        } else {
+          let sentMessage = 'Sent:\n\n'
+          for (let i = 0; i < sent.length; i += 1) {
+            sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
+          }
+          sentMessage += '\n'
+          let receivedMessage = 'Received:\n\n'
+          for (let i = 0; i < received.length; i += 1) {
+            receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
+          }
+          if (sent.length === 0) {
+            sentMessage = ''
+          }
+          if (received.length === 0) {
+            receivedMessage = ''
+          }
+          interaction.reply({content: sentMessage + receivedMessage, ephemeral: true})
+        }
+      }
     } else {
         interaction.reply({content: "Please request to join the group by typing '/join' if you have not already", ephemeral: true})
       }
@@ -699,7 +765,8 @@ export async function main() {
     StatsCommand,
     EndorseCommand,
     CandidatesCommand,
-    StrikeCommand
+    StrikeCommand,
+    RecentCommand
   ];
 
     try {
