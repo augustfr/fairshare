@@ -486,26 +486,62 @@ client.on('interactionCreate', async (interaction) => {
     const senderDisplayName = interaction.user.username
     if (interaction.guildId == null) {
       console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' via DM")
-      if (interaction.commandName === 'balance') {
-        const balance = await getUserGlobalStats(senderID)
-        if (balance.length === 0) {
+      const globalUserStats = await getUserGlobalStats(senderID)
+      if (interaction.commandName === 'balance' || interaction.commandName === 'recent') {
+        if (globalUserStats.length === 0) {
           interaction.reply({content: "You are not in any groups. Go to a group's server and use '/join'", ephemeral: true})
         } else {
-          let message = []
-          if (balance.length === 1) {
-            message = 'You are a member of ' + balance.length + ' group!\n\nYour balance is:\n\n'
-          } else {
-            message = 'You are a member of ' + balance.length + ' groups!\n\nYour balances are:\n\n'
+          if (interaction.commandName === 'balance') {
+            let message = []
+              if (globalUserStats.length === 1) {
+                message = 'You are a member of ' + globalUserStats.length + ' group!\n\nYour balance is:\n\n'
+              } else {
+                message = 'You are a member of ' + globalUserStats.length + ' groups!\n\nYour balances are:\n\n'
+              }
+              for (let i = 0; i < globalUserStats.length; i += 1) {
+                const symbol = (await getServerStats(globalUserStats[i].serverID)).symbol
+                const serverDisplayName = (await client.guilds.fetch(globalUserStats[i].serverID)).name
+                message += (symbol + globalUserStats[i].balance + ' in ' + serverDisplayName + '\n')
+              }
+              interaction.reply({content: message, ephemeral: true})
+            
+          } else if (interaction.commandName === 'recent') {
+            const currentDate = Date.now();
+            let message = ''
+            for (let i = 0; i < globalUserStats.length; i += 1) {
+              const symbol = (await getServerStats(globalUserStats[i].serverID)).symbol
+              const serverDisplayName = (await client.guilds.fetch(globalUserStats[i].serverID)).name
+              const serverID = (await client.guilds.fetch(globalUserStats[i].serverID)).id
+              const sent = await getUserSentTransactions(senderID, serverID, currentDate - 604800000, currentDate)
+              const received = await getUserReceivedTransactions(senderID, serverID, currentDate - 604800000, currentDate)
+              message += serverDisplayName + ':\n\n'
+              if ((sent.length === 0) && (received.length == 0)) {
+                message += "You've had no transactions in the past week\n\n"
+              } else {
+                let sentMessage = 'Sent:\n'
+                for (let i = 0; i < sent.length; i += 1) {
+                  sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
+                }
+                sentMessage += '\n'
+                let receivedMessage = 'Received:\n'
+                for (let i = 0; i < received.length; i += 1) {
+                  receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
+                }
+                receivedMessage += '\n'
+                if (sent.length === 0) {
+                  sentMessage = ''
+                }
+                if (received.length === 0) {
+                  receivedMessage = ''
+                }
+                message += sentMessage + receivedMessage
+              }
+            }
+            interaction.reply({content: message, ephemeral: true})
           }
-          for (let i = 0; i < balance.length; i += 1) {
-            const symbol = (await getServerStats(balance[i].serverID)).symbol
-            const serverDisplayName = (await client.guilds.fetch(balance[i].serverID)).name
-            message += (symbol + balance[i].balance + ' in ' + serverDisplayName + '\n')
-          }
-          interaction.reply({content: message, ephemeral: true})
         }
-      } else {
-        interaction.reply({content: "Only the '/balance' command works in DMs for now. Please go to your individual group to use the other commands.", ephemeral: true})
+    } else {
+        interaction.reply({content: "Only the '/balance' and '/recent' commands work in DMs. Please go to your individual group to use the other commands.", ephemeral: true})
       }
     } else {
       const serverDisplayName = interaction.guild.name
@@ -755,12 +791,12 @@ client.on('interactionCreate', async (interaction) => {
           if ((sent.length === 0) && (received.length == 0)) {
             interaction.reply({content: "You've had no transactions in the past week", ephemeral: true})
           } else {
-            let sentMessage = 'Sent:\n\n'
+            let sentMessage = 'Sent:\n'
             for (let i = 0; i < sent.length; i += 1) {
               sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
             }
             sentMessage += '\n'
-            let receivedMessage = 'Received:\n\n'
+            let receivedMessage = 'Received:\n'
             for (let i = 0; i < received.length; i += 1) {
               receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
             }
