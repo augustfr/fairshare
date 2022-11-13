@@ -777,6 +777,7 @@ client.on('interactionCreate', async (interaction) => {
                 clearStrikes(receiverID, serverID)
                 await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.remove(String(stats.generalRoleID)).catch((err) => {console.log(err)});
                 interaction.reply({content: 'You have successfully given a strike to <@' + receiverID + '> which has voted them out of the group', ephemeral: true})
+                interaction.options.getUser('user').send('You have been voted out of the ' + serverDisplayName + " group. You can request to join back in by going to the group's server and using '/join'").catch((err) => {});
               } else {
                 interaction.reply({content: 'You have successfully given a strike to <@' + receiverID + '>', ephemeral: true})
               }
