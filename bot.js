@@ -407,7 +407,7 @@ async function getVolume(serverID, startDate, endDate) {
       volume += amounts[i]
     }
   }
-  return volume
+  return {volume: volume, numTransactions: amounts.length}
 }
 
 async function getUserSentTransactions(userID, serverID, startDate, endDate) {
@@ -681,7 +681,7 @@ client.on('interactionCreate', async (interaction) => {
         const gini = roundUp(await computeGiniIndex(serverID))
         const numUsers = (await getUsers(serverID)).length
         const serverMoneySupply = await moneySupply(serverID)
-        interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + volume + '\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
+        interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + volume.volume + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
        } else if (interaction.commandName === 'candidates') {
         const candidates = await viewCandidates(serverID)
         let message = 'Current candidates:\n\n'
