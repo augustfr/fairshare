@@ -84,7 +84,7 @@ async function requestToJoin(userID, serverID) {
   const currentDate = new Date();
   const { error } = await supabase
   .from('joinRequests')
-  .insert({ userID: userID, serverID: serverID, requestDate: currentDate, votes: 0})
+  .insert({ userID: userID, serverID: serverID, requestDate: currentDate})
 }
 
 async function getUserEndorsements(userID, serverID) {
