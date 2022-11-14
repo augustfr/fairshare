@@ -24,6 +24,10 @@ import EndorseCommand from './commands/endorse.js';
 import CandidatesCommand from './commands/candidates.js';
 import StrikeCommand from './commands/strike.js';
 import RecentCommand from './commands/recent.js';
+import AddExchangeCommand from './commands/addExchange.js';
+import FundExchangeCommand from './commands/fundExchange.js';
+import ExchangesCommand from './commands/exchanges.js';
+
 
 
 config();
@@ -128,6 +132,16 @@ async function recordEndorsement(senderID, receiverID, serverID) {
   .insert({senderID: senderID, receiverID: receiverID, serverID: serverID})
 }
 
+async function addExchangePair(userID_a, serverID_a, balance_a, rate_a, userID_b, serverID_b, balance_b, rate_b, ) {
+  const { data, error } = await supabase
+  .from('exchanges')
+  .insert([
+    {userID: userID_a, serverID: serverID_a, balance: balance_a, rate: rate_a},
+    {userID: userID_b, serverID: serverID_b, balance: balance_b, rate: rate_b}])
+  .select()
+  return data
+}
+
 async function initUser(userID, serverID, income) {
   const currentDate = new Date();
   const { error } = await supabase
@@ -207,6 +221,31 @@ async function getUserGlobalStats(userID) {
   return data
 }
 
+async function getExchanges(userID, serverID) {
+  const { data, error } = await supabase
+  .from('exchanges')
+  .select()
+  .eq('userID', userID)
+  .eq('serverID', serverID)
+  return data
+}
+
+async function getExchangeByID(exID) {
+  const { data, error } = await supabase
+  .from('exchanges')
+  .select()
+  .eq('id', exID)
+  return data
+}
+
+async function getExchangesByServer(serverID) {
+  const { data, error } = await supabase
+  .from('exchanges')
+  .select()
+  .eq('serverID', serverID)
+  return data
+}
+
 async function setServerStats(serverID, fee, income, genRole, symbol, feed_channel) {
   const currentDate = new Date();
   if (feed_channel === null){
@@ -268,6 +307,20 @@ export async function updateBalance(userID, serverID, newAmount) {
   .update({balance: newAmount})
   .eq('userID', userID)
   .eq('serverID', serverID)
+}
+
+async function updateExchange(exID, amount, rate) {
+  const { error } = await supabase
+  .from('exchanges')
+  .update({balance: amount, rate: rate})
+  .eq('id', exID)
+}
+
+async function addFoExID(exID, foExID) {
+  const { error } = await supabase
+  .from('exchanges')
+  .update({foreignExID: foExID})
+  .eq('id', exID)
 }
 
 async function vote(userID, serverID, fee, income) {
@@ -745,10 +798,10 @@ client.on('interactionCreate', async (interaction) => {
         }
         } else if (interaction.commandName === 'stats') {
           const currentDate = Date.now();
-          const volume = await getVolume(serverID, currentDate - 604800000, currentDate)
+          const volume = roundUp(await getVolume(serverID, currentDate - 604800000, currentDate))
           const gini = roundUp(await computeGiniIndex(serverID))
           const numUsers = (await getUsers(serverID)).length
-          const serverMoneySupply = await moneySupply(serverID)
+          const serverMoneySupply = roundUp(await moneySupply(serverID))
           interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + volume.volume + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
         } else if (interaction.commandName === 'candidates') {
           const candidates = await viewCandidates(serverID)
@@ -809,6 +862,70 @@ client.on('interactionCreate', async (interaction) => {
             }
             interaction.reply({content: sentMessage + receivedMessage, ephemeral: true})
           }
+        } else if (interaction.commandName === 'add_exchange') {
+          const userExchanges = await getExchanges(senderID, serverID)
+          const balance = await getUserBalance(senderID, serverID)
+          const amount = interaction.options.getNumber('amount')
+          if (amount <= balance) {
+            if (userExchanges.length > 0) {
+              for (let i = 0; i < userExchanges.length; i += 1) {
+                const foExID = (await getExchangeByID(userExchanges[i].id))[0].foreignExID
+                const pairing = await getExchangeByID(foExID)
+                if ((userExchanges[i].serverID == serverID) && (pairing[0].serverID == interaction.options.getString('server'))) {
+                  interaction.reply({content: 'You have already created an exchange for this pairing', ephemeral: true})
+                  return
+                }
+              }
+            }
+            const newExPair = await addExchangePair(senderID, serverID, amount, interaction.options.getNumber('rate'), interaction.options.getString('user'), interaction.options.getString('server'), 0, 0)
+            addFoExID(newExPair[0].id, newExPair[1].id)
+            addFoExID(newExPair[1].id, newExPair[0].id)
+            updateBalance(senderID, serverID, balance - amount)
+            interaction.reply({content: "Your exchange has been added! The user you set will need to fund their side by using '/fund_exchange'", ephemeral: true})
+          } else {
+            interaction.reply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
+          }
+        } else if (interaction.commandName === 'fund_exchange') {
+          const userExchanges = await getExchanges(senderID, serverID)
+          const balance = await getUserBalance(senderID, serverID)
+          const amount = interaction.options.getNumber('amount')
+          if (amount <= balance) {
+            if (userExchanges.length > 0) {
+              for (let i = 0; i < userExchanges.length; i += 1) {
+                const foExID = (await getExchangeByID(userExchanges[i].id))[0].foreignExID
+                const pairing = await getExchangeByID(foExID)
+                if ((userExchanges[i].serverID == serverID) && (pairing[0].serverID == interaction.options.getString('server')) && (pairing[0].userID == interaction.options.getString('user'))) {
+                  const currentExchangeBalance = userExchanges[i].balance
+                  updateExchange(userExchanges[i].id, currentExchangeBalance + amount, interaction.options.getNumber('rate'))
+                  updateBalance(senderID, serverID, balance - amount)
+                  interaction.reply({content: "Your exchange pairing has been successfully updated!", ephemeral: true})
+                }
+              }
+            } else {
+              interaction.reply({content: "There is no exchange pair for you to fund. Create your own exchange with another user by using '/add_exchange'", ephemeral: true})
+            }
+            
+          } else {
+            interaction.reply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
+          }
+        } else if (interaction.commandName === 'exchanges') {
+          const serverExchanges = await getExchangesByServer(serverID)
+          let message = ''
+          if (serverExchanges.length == 1) {
+            message = serverDisplayName + ' has ' + serverExchanges.length + ' exchange:\n\n'
+          } else if (serverExchanges.length > 1) {
+            message = serverDisplayName + ' has ' + serverExchanges.length + ' exchanges:\n\n'
+          } else {
+            interaction.reply({content: "This group has no exchanges. Add your own with '/add_exchange'", ephemeral: true})
+            return
+          }
+          for (let i = 0; i < serverExchanges.length; i += 1) {
+            const foExID = (await getExchangeByID(serverExchanges[i].id))[0].foreignExID
+            const pairing = await getExchangeByID(foExID)
+            const foreignSymbol = (await getServerStats(pairing[0].serverID)).symbol
+            message += '<@' + serverExchanges[i].userID + '> has funded ' + symbol + serverExchanges[i].balance + ' for ' + (await client.guilds.fetch(pairing[0].serverID)).name + ' (' + foreignSymbol + ')' + ' with a rate of ' + serverExchanges[i].rate + '\n'
+          }
+          interaction.reply({content: message, ephemeral: true})
         }
       } else {
           interaction.reply({content: "Please request to join the group by typing '/join' if you have not already", ephemeral: true})
@@ -836,7 +953,10 @@ export async function main() {
     EndorseCommand,
     CandidatesCommand,
     StrikeCommand,
-    RecentCommand
+    RecentCommand,
+    AddExchangeCommand,
+    FundExchangeCommand,
+    ExchangesCommand
   ];
 
     try {
