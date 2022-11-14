@@ -1074,6 +1074,8 @@ client.on('interactionCreate', async (interaction) => {
           const balance = await getUserBalance(senderID, serverID)
           const foreignAmount = interaction.options.getNumber('amount')
           const receiverID = interaction.options.getString('server')
+          const foreignFee = (await getServerStats(receiverID)).fee
+          const foreignAmountWithFee = prettyDecimal(foreignAmount / ((100 - foreignFee) / 100))
           const exchanges = await validExchangePairs(serverID, receiverID)
           if (!exchanges) {
             interaction.editReply({content: 'There are no active exchange pairs for this transfer', ephemeral: true})
@@ -1088,7 +1090,7 @@ client.on('interactionCreate', async (interaction) => {
               interaction.editReply({content: 'There are no exchanges pairs with enough liquidity for this transfer', ephemeral: true})
             } else {
               const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
-              const amount = foreignAmount * bestRoute.rate
+              const amount = foreignAmountWithFee * bestRoute.rate
               const fee = prettyDecimal((amount * (stats.fee / 100)))
               const amountWithFee = prettyDecimal((amount + fee))
               if (amountWithFee <= balance) {
@@ -1112,7 +1114,7 @@ client.on('interactionCreate', async (interaction) => {
                 const embed = new EmbedBuilder()
                   .setColor(0x0099FF)
                   .setTitle('Transfer')
-                  .setDescription('The best route will cost you ' + symbol + amountWithFee + ' and will be able to be redeemed for ' + foreignSymbol + redeemable + ' in ' + receiverDisplayName)
+                  .setDescription('The best route will cost you ' + symbol + amountWithFee + ' and will be able to be redeemed for ' + foreignSymbol + redeemable + ' in ' + receiverDisplayName + ' after fees')
                   .setFooter({ text: String(remittanceID)});
                 await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
               } else {
