@@ -754,34 +754,54 @@ client.on('interactionCreate', async (interaction) => {
           } else if (interaction.commandName === 'recent') {
             const currentDate = Date.now();
             let message = ''
+            let sentMessage = ''
+            let sentExtMessage = ''
+            let receivedMessage = ''
+            let receivedExtMessage = ''
             for (let i = 0; i < globalUserStats.length; i += 1) {
               const symbol = (await getServerStats(globalUserStats[i].serverID)).symbol
               const serverDisplayName = (await client.guilds.fetch(globalUserStats[i].serverID)).name
               const serverID = (await client.guilds.fetch(globalUserStats[i].serverID)).id
               const sent = await getUserSentTransactions(senderID, serverID, currentDate - 604800000, currentDate)
+              const sentExt = await getUserExternalTransfers(senderID, serverID, currentDate - 604800000, currentDate)
               const received = await getUserReceivedTransactions(senderID, serverID, currentDate - 604800000, currentDate)
+              const receivedExt = await getUserExternalRedemptions(senderID, serverID, currentDate - 604800000, currentDate)
               message += serverDisplayName + ':\n\n'
-              if ((sent.length === 0) && (received.length == 0)) {
-                message += "You've had no transactions in the past week\n\n"
-              } else {
-                let sentMessage = 'Sent:\n'
-                for (let i = 0; i < sent.length; i += 1) {
-                  sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
-                }
-                sentMessage += '\n'
-                let receivedMessage = 'Received:\n'
-                for (let i = 0; i < received.length; i += 1) {
-                  receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
-                }
-                receivedMessage += '\n'
-                if (sent.length === 0) {
-                  sentMessage = ''
-                }
-                if (received.length === 0) {
-                  receivedMessage = ''
-                }
-                message += sentMessage + receivedMessage
+              sentMessage = 'Sent:\n'
+              for (let i = 0; i < sent.length; i += 1) {
+                sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
               }
+              sentMessage += '\n'
+              receivedMessage = 'Received:\n'
+              for (let i = 0; i < received.length; i += 1) {
+                receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
+              }
+              receivedMessage += '\n'
+              if (sent.length === 0) {
+                sentMessage = ''
+              }
+              if (received.length === 0) {
+                receivedMessage = ''
+              }
+              sentExtMessage = ''
+              receivedExtMessage = ''
+              if (sentExt.length > 0) {
+                sentExtMessage = 'External transfers:\n'
+                for (let i = 0; i < sentExt.length; i += 1) {
+                  const serverDisplayName = (await client.guilds.fetch(sentExt[i].receiverServerID)).name
+                  sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + '\n')
+                }
+                sentExtMessage += '\n'
+              }
+              if (receivedExt.length > 0) {
+                receivedExtMessage = 'External redemptions:\n'
+                for (let i = 0; i < receivedExt.length; i += 1) {
+                  const serverDisplayName = (await client.guilds.fetch(receivedExt[i].originServerID)).name
+                  receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + '\n')
+                }
+                receivedExtMessage += '\n'
+              }
+              message += sentMessage + receivedMessage + sentExtMessage + receivedExtMessage
             }
             interaction.editReply({content: message, ephemeral: true})
           }
@@ -1036,7 +1056,7 @@ client.on('interactionCreate', async (interaction) => {
           const sent = await getUserSentTransactions(senderID, serverID, currentDate - 604800000, currentDate)
           const sentExt = await getUserExternalTransfers(senderID, serverID, currentDate - 604800000, currentDate)
           const received = await getUserReceivedTransactions(senderID, serverID, currentDate - 604800000, currentDate)
-          const receivedExt = await getUserExternalRedemptions(senderID, serverID, currentDate - 604800000, currentDate )
+          const receivedExt = await getUserExternalRedemptions(senderID, serverID, currentDate - 604800000, currentDate)
           if ((sent.length === 0) && (received.length == 0) && (sentExt.length === 0) && (receivedExt.length == 0)) {
             interaction.editReply({content: "You've had no transactions in the past week", ephemeral: true})
           } else {
