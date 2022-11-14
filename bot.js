@@ -36,6 +36,7 @@ import ExchangesCommand from './commands/exchanges.js';
 import TransferCommand from './commands/transfer.js';
 import RedeemCommand from './commands/redeem.js';
 import fundExchange from './commands/fundExchange.js';
+import redeem from './commands/redeem.js';
 
 
 
@@ -241,6 +242,13 @@ export async function deleteRedeemLog(coupon) {
   .from('redeemLog')
   .delete()
   .eq('coupon', coupon)
+}
+
+async function redeemed(redeemID) {
+  const { error } = await supabase
+  .from('redeemLog')
+  .update({redeemed: true})
+  .eq('id', redeemID)
 }
 
 async function getRedeemLog(redeemID) {
@@ -1198,29 +1206,39 @@ client.on('interactionCreate', async (interaction) => {
     const redeemID = parseInt(interaction.message.embeds[0].data.footer.text)
     if (await redeemLogExists(redeemID)) {
       const redeemLog = await getRedeemLog(redeemID)
-      const coupon = await getCoupon(redeemLog[0].coupon)
-      const balance = await getUserBalance(interaction.user.id, coupon[0].serverID)
-      const exchange_a = await getExchangeByID(redeemLog[0].exchangeID)
-      const exchange_b = await getExchangeByID(exchange_a[0].foreignExchangeID)
-      const stats = await getServerStats(coupon[0].serverID)
-      const serverDisplayName = (await client.guilds.fetch(coupon[0].serverID)).name
-      updateBalance(interaction.user.id, coupon[0].serverID, balance + redeemLog[0].amount)
-      updateExchange(exchange_a[0].id, exchange_a[0].balance - (redeemLog[0].amount / ((100 - stats.fee)/100)), exchange_a[0].rate)
-      updateExchange(exchange_b[0].id, exchange_b[0].balance + coupon[0].amount, exchange_b[0].rate)
-      deleteCoupon(coupon[0].coupon)
-      deleteRedeemLog(coupon[0].coupon)
-      interaction.editReply({content: 'Your redemption was successful. Your current balance in ' + serverDisplayName + ' is: ' + stats.symbol + (balance + redeemLog[0].amount), ephemeral: true})
+      if (!redeemLog[0].redeemed) {
+        const coupon = await getCoupon(redeemLog[0].coupon)
+        const balance = roundUp(await getUserBalance(interaction.user.id, coupon[0].serverID))
+        const exchange_a = await getExchangeByID(redeemLog[0].exchangeID)
+        const exchange_b = await getExchangeByID(exchange_a[0].foreignExchangeID)
+        const stats = await getServerStats(coupon[0].serverID)
+        const serverDisplayName = (await client.guilds.fetch(coupon[0].serverID)).name
+        const amount =  redeemLog[0].amount
+        const fee = (100 - stats.fee)/100
+        updateBalance(interaction.user.id, coupon[0].serverID, balance + amount)
+        updateExchange(exchange_a[0].id, exchange_a[0].balance - (amount / fee), exchange_a[0].rate)
+        updateExchange(exchange_b[0].id, exchange_b[0].balance + coupon[0].amount, exchange_b[0].rate)
+        deleteCoupon(coupon[0].coupon)
+        redeemed(redeemID)
+        interaction.editReply({content: 'Your redemption was successful. Your current balance in ' + serverDisplayName + ' is: ' + stats.symbol + (balance + redeemLog[0].amount), ephemeral: true})
+      } else {
+        interaction.editReply({content: 'This payment has already been redeemed', ephemeral: true})
+      }
     } else {
-      interaction.editReply({content: 'This payment is either expired or has already been claimed', ephemeral: true})
+      interaction.editReply({content: 'This payment has expired', ephemeral: true})
     }
   } else if (interaction.customId === 'decline_exchange') {
     const redeemID = parseInt(interaction.message.embeds[0].data.footer.text)
+    const redeemLog = await getRedeemLog(redeemID)
     if (await redeemLogExists(redeemID)) {
-      const redeemLog = await getRedeemLog(redeemID)
-      const coupon = await getCoupon(redeemLog[0].coupon)
-      deleteRedeemLog(coupon[0].coupon)
+      if (!redeemLog[0].redeemed) {
+        const coupon = await getCoupon(redeemLog[0].coupon)
+        deleteRedeemLog(coupon[0].coupon)
+        interaction.editReply({content: 'The redemption has been declined', ephemeral: true})
+      } else {
+        interaction.editReply({content: 'This payment has already been redeemed', ephemeral: true})
+      }
     }
-    interaction.editReply({content: 'The redemption has been declined', ephemeral: true})
   }
 }
 
