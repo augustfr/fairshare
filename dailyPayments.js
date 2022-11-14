@@ -1,5 +1,4 @@
 import { config } from 'dotenv';
-import moment from 'moment';
 import { getUserBalance } from "./bot.js";
 import { updateBalance } from "./bot.js";
 import { getServerStats } from "./bot.js";
