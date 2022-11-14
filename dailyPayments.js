@@ -59,9 +59,6 @@ async function sendMessage(msg, channelid) {
 }
 
 export async function runPayments() {
-  // client.on('ready', () => {
-  //   console.log(`Logged in as ${client.user.tag}!`);
-  // });
 
   client.login(TOKEN);
 
@@ -71,14 +68,6 @@ export async function runPayments() {
 
     for (let i = 0; i < serverList.length; i++) {
       const stats = await getServerStats(serverList[i])
-      
-      //const users = await getUsers(stats.serverID)
-      //const userObj = await client.users.fetch(users[0])
-
-      // const roles = await userObj.roles.cache.first
-
-      // const guild = client.guilds.cache.get("1039296120007962635");
-      // const role = guild.roles.cache.get('1039436338379898890')
 
       if (stats.creationTime !== null) {
 
