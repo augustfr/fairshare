@@ -692,11 +692,11 @@ async function getUserReceivedTransactions(userID, serverID, startDate, endDate)
   return result
 }
 
-async function transactionLog(serverID, userID, receiverID, amount, fee) {
+async function transactionLog(serverID, userID, receiverID, amount, fee, message) {
   const currentDate = new Date();
   const { error } = await supabase
   .from('transactions')
-  .insert({ date: currentDate, senderID: userID, receiverID: receiverID, amount: amount, fee: fee, serverID: serverID})
+  .insert({ date: currentDate, senderID: userID, receiverID: receiverID, amount: amount, fee: fee, serverID: serverID, message: message})
 }
 
 function prettyDecimal(number) {
@@ -956,7 +956,7 @@ client.on('interactionCreate', async (interaction) => {
             } else {
                 updateBalance(senderID, serverID, senderCurrentBalance - amountWithFee)
                 updateBalance(receiverID, serverID, receiverCurrentBalance + amount)
-                transactionLog(serverID, senderID, receiverID, amount, fee)
+                transactionLog(serverID, senderID, receiverID, amount, fee, interaction.options.getString('message'))
                 await interaction.editReply({content: 'Sent ' + symbol + amount + ' to <@' + receiverID + '>, and a ' + symbol + fee + ' transaction fee was taken, totalling to ' + symbol + amountWithFee, ephemeral: true})
                 interaction.options.getUser('user').send('<@' + senderID + '> has sent you ' + symbol + amount + ' in the ' + serverDisplayName + ' group').catch((err) => {
                   if (stats.feedChannel === null || stats.feedChannel === '') {
