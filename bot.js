@@ -215,11 +215,11 @@ async function getCoupon(coupon) {
   return data
 }
 
-async function addRedeemLog(userID, coupon, amount, exID) {
+async function addRedeemLog(userID, coupon, amount, exID, originServerID, serverID) {
   const currentDate = new Date();
   const { data, error } = await supabase
   .from('redeemLog')
-  .insert({userID: userID, coupon: coupon, amount: amount, creationDate: currentDate, exchangeID: exID})
+  .insert({userID: userID, coupon: coupon, amount: amount, creationDate: currentDate, exchangeID: exID, originServerID: originServerID, serverID: serverID})
   .select()
   return data
 }
@@ -249,6 +249,13 @@ async function redeemed(redeemID) {
   .from('redeemLog')
   .update({redeemed: true})
   .eq('id', redeemID)
+}
+
+async function couponRedeemed(coupon) {
+  const { error } = await supabase
+  .from('remittance')
+  .update({redeemed: true})
+  .eq('coupon', coupon)
 }
 
 async function getRedeemLog(redeemID) {
@@ -626,6 +633,48 @@ async function getUserSentTransactions(userID, serverID, startDate, endDate) {
   return result
 }
 
+async function getUserExternalTransfers(userID, originServerID, startDate, endDate) {
+  const { data, error } = await supabase
+  .from('remittance')
+  .select()
+  .eq('originServerID', originServerID)
+  .eq('senderID', userID)
+  const dates = data.map(a => a.creationDate)
+  const amounts = data.map(a => a.amount)
+  const redemptions = data.map(a => a.redeemed)
+  const receiverServerID = data.map(a => a.serverID)
+  let result = []
+  for (let i = 0; i < dates.length; i += 1) {
+    const transactionDate = new Date(dates[i]).getTime()
+    if ((startDate < transactionDate) && (transactionDate < endDate) && redemptions[i]) {
+      const transaction = {receiverServerID: receiverServerID[i], amount: amounts[i]}
+      result.push(transaction)
+    }
+  }
+  return result
+}
+
+async function getUserExternalRedemptions(userID, serverID, startDate, endDate) {
+  const { data, error } = await supabase
+  .from('redeemLog')
+  .select()
+  .eq('serverID', serverID)
+  .eq('userID', userID)
+  const dates = data.map(a => a.creationDate)
+  const amounts = data.map(a => a.amount)
+  const originServerID = data.map(a => a.originServerID)
+  const redemptions = data.map(a => a.redeemed)
+  let result = []
+  for (let i = 0; i < dates.length; i += 1) {
+    const transactionDate = new Date(dates[i]).getTime()
+    if ((startDate < transactionDate) && (transactionDate < endDate) && redemptions[i]) {
+      const transaction = {originServerID: originServerID[i], amount: amounts[i]}
+      result.push(transaction)
+    }
+  }
+  return result
+}
+
 async function getUserReceivedTransactions(userID, serverID, startDate, endDate) {
   const { data, error } = await supabase
   .from('transactions')
@@ -985,8 +1034,10 @@ client.on('interactionCreate', async (interaction) => {
         } else if (interaction.commandName === 'recent') {
           const currentDate = Date.now();
           const sent = await getUserSentTransactions(senderID, serverID, currentDate - 604800000, currentDate)
+          const sentExt = await getUserExternalTransfers(senderID, serverID, currentDate - 604800000, currentDate)
           const received = await getUserReceivedTransactions(senderID, serverID, currentDate - 604800000, currentDate)
-          if ((sent.length === 0) && (received.length == 0)) {
+          const receivedExt = await getUserExternalRedemptions(senderID, serverID, currentDate - 604800000, currentDate )
+          if ((sent.length === 0) && (received.length == 0) && (sentExt.length === 0) && (receivedExt.length == 0)) {
             interaction.editReply({content: "You've had no transactions in the past week", ephemeral: true})
           } else {
             let sentMessage = 'Sent:\n'
@@ -998,13 +1049,35 @@ client.on('interactionCreate', async (interaction) => {
             for (let i = 0; i < received.length; i += 1) {
               receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
             }
+            receivedMessage += '\n'
             if (sent.length === 0) {
               sentMessage = ''
             }
             if (received.length === 0) {
               receivedMessage = ''
             }
-            interaction.editReply({content: sentMessage + receivedMessage, ephemeral: true})
+            let sentExtMessage = ''
+            let receivedExtMessage = ''
+            if (sentExt.length > 0) {
+              sentExtMessage = 'External transfers:\n'
+              for (let i = 0; i < sentExt.length; i += 1) {
+                const serverDisplayName = (await client.guilds.fetch(sentExt[i].receiverServerID)).name
+                sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + '\n')
+              }
+              sentExtMessage += '\n'
+            }
+
+            if (receivedExt.length > 0) {
+              receivedExtMessage = 'External redemptions:\n'
+              for (let i = 0; i < receivedExt.length; i += 1) {
+                const serverDisplayName = (await client.guilds.fetch(receivedExt[i].originServerID)).name
+                receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + '\n')
+              }
+              receivedExtMessage += '\n'
+            }
+
+
+            interaction.editReply({content: sentMessage + receivedMessage + sentExtMessage + receivedExtMessage, ephemeral: true})
           }
         } else if (interaction.commandName === 'add_exchange') {
           const userExchanges = await getExchanges(senderID, serverID)
@@ -1104,9 +1177,13 @@ client.on('interactionCreate', async (interaction) => {
                       .setLabel('Generate Payment Coupon')
                       .setStyle(ButtonStyle.Primary),
                   );
-                const coupon = generateUID()
+                let coupon
                 while (true) {
-                  if (!(await couponExists(coupon))) {
+                  coupon = generateUID()
+                  if (await couponExists(coupon)) {
+                    if (!(await getCoupon(coupon))[0].redeemed)
+                      break
+                  } else {
                     break
                   }
                 }
@@ -1150,7 +1227,7 @@ client.on('interactionCreate', async (interaction) => {
                     if (redeemLog.length > 0) {
                       redeemID = redeemLog[0].id
                     } else {
-                      redeemID = (await addRedeemLog(senderID, coupon[0].coupon, amount - fee, bestRoute.exID))[0].id
+                      redeemID = (await addRedeemLog(senderID, coupon[0].coupon, amount - fee, bestRoute.exID, coupon[0].originServerID, coupon[0].serverID))[0].id
                     }
                     const row = new ActionRowBuilder()
                       .addComponents(
@@ -1220,7 +1297,7 @@ client.on('interactionCreate', async (interaction) => {
         updateBalance(interaction.user.id, coupon[0].serverID, balance + amount)
         updateExchange(exchange_a[0].id, exchange_a[0].balance - (amount / fee), exchange_a[0].rate)
         updateExchange(exchange_b[0].id, exchange_b[0].balance + coupon[0].amount, exchange_b[0].rate)
-        deleteCoupon(coupon[0].coupon)
+        couponRedeemed(coupon[0].coupon)
         redeemed(redeemID)
         interaction.editReply({content: 'Your redemption was successful. Your current balance in ' + serverDisplayName + ' is: ' + stats.symbol + (balance + redeemLog[0].amount), ephemeral: true})
       } else {

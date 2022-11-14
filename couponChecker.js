@@ -23,7 +23,8 @@ async function getCoupons() {
   const originServerIDs = data.map(a => a.originServerID)
   const userIDs = data.map(a => a.senderID)
   const amounts = data.map(a => a.amount)
-  return {coupons, creationTimes, funded, originServerIDs, userIDs, amounts}
+  const redemptions = data.map(a => a.redeemed)
+  return {coupons, creationTimes, funded, originServerIDs, userIDs, amounts, redemptions}
 }
 
 export async function deleteCoupon(coupon) {
@@ -42,7 +43,7 @@ export async function checkCoupons() {
     const couponList = await getCoupons()
     for (let i = 0; i < couponList.coupons.length; i++) {
       if (couponList.creationTimes.length > 0) {
-        if (Date.now() - (new Date(couponList.creationTimes[i]).getTime()) > 300000) {
+        if ((Date.now() - (new Date(couponList.creationTimes[i]).getTime()) > 300000) && !couponList.redemptions[i]) {
           await deleteCoupon(couponList.coupons[i])
           await deleteRedeemLog(couponList.coupons[i])
           if (couponList.funded[i]) {
