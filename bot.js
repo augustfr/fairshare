@@ -1,9 +1,15 @@
 import { config } from 'dotenv';
 import { runPayments } from './dailyPayments.js'
+import { checkCoupons } from './couponChecker.js'
+import { deleteCoupon } from './couponChecker.js'
 import {
   Client,
   GatewayIntentBits,
   Routes,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder
 } from 'discord.js';
 import { REST } from '@discordjs/rest';
 
@@ -27,6 +33,9 @@ import RecentCommand from './commands/recent.js';
 import AddExchangeCommand from './commands/addExchange.js';
 import FundExchangeCommand from './commands/fundExchange.js';
 import ExchangesCommand from './commands/exchanges.js';
+import TransferCommand from './commands/transfer.js';
+import RedeemCommand from './commands/redeem.js';
+import fundExchange from './commands/fundExchange.js';
 
 
 
@@ -67,6 +76,32 @@ function sumArray(array) {
 
 function roundUp(num) {
   return Math.ceil(num * 100) / 100;
+}
+
+async function validExchangePairs(serverID_a, serverID_b) {
+  const exchanges_a = await getExchangesByServer(serverID_a)
+  const exchanges_b = await getExchangesByServer(serverID_b)
+  if ((exchanges_a.length === 0) || (exchanges_b.length === 0)) {
+    return false
+  } else {
+    let validExchanges = []
+    for (let i = 0; i < exchanges_a.length; i++) {
+      const foExID = (await getExchangeByID(exchanges_a[i].id))[0].foreignExchangeID
+      const pairing = await getExchangeByID(foExID)
+      if (pairing[0].serverID === serverID_b) {
+        const rate_a = roundUp(exchanges_a[i].rate)
+        const rate_b = roundUp(pairing[0].rate)
+        if ((1 / rate_a) === rate_b) {
+          validExchanges.push({exID: exchanges_a[i].id, foExID: pairing[0].id, balance: exchanges_a[i].balance, foreignBalance: pairing[0].balance, rate: exchanges_a[i].rate})
+        }
+      } 
+    }
+    if (validExchanges.length === 0) {
+      return false
+    } else {
+      return validExchanges
+    }
+  }
 }
 
 async function computeGiniIndex(serverID) {
@@ -130,6 +165,98 @@ async function recordEndorsement(senderID, receiverID, serverID) {
   const { error } = await supabase
   .from('endorsements')
   .insert({senderID: senderID, receiverID: receiverID, serverID: serverID})
+}
+
+async function addRemittance(senderID, serverID, coupon, amount, fee, originServerID) {
+  const currentDate = new Date();
+  const { data, error } = await supabase
+  .from('remittance')
+  .insert({senderID: senderID, serverID: serverID, coupon: coupon, creationDate: currentDate, amount: amount, fee: fee, originServerID: originServerID})
+  .select()
+  return data
+}
+
+async function fundCoupon(coupon) {
+  const currentDate = new Date();
+  const { data, error } = await supabase
+  .from('remittance')
+  .update({funded: true, creationDate: currentDate})
+  .eq('coupon', coupon)
+  return data
+}
+
+async function getRemittance(remittanceID) {
+  const { data, error } = await supabase
+  .from('remittance')
+  .select()
+  .eq('id', remittanceID)
+  return data
+}
+
+async function couponExists(coupon) {
+  const {data} = await supabase
+  .from('remittance')
+  .select()
+  .eq('coupon', coupon)
+  .single()
+  if(data !== null) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+async function getCoupon(coupon) {
+  const { data, error } = await supabase
+  .from('remittance')
+  .select()
+  .eq('coupon', coupon)
+  return data
+}
+
+async function addRedeemLog(userID, coupon, amount, exID) {
+  const currentDate = new Date();
+  const { data, error } = await supabase
+  .from('redeemLog')
+  .insert({userID: userID, coupon: coupon, amount: amount, creationDate: currentDate, exchangeID: exID})
+  .select()
+  return data
+}
+
+async function redeemLogExists(redeemID) {
+  const { data, error } = await supabase
+  .from('redeemLog')
+  .select('userID')
+  .eq('id', redeemID)
+  .single()
+  if(data !== null) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+export async function deleteRedeemLog(coupon) {
+  const { error } = await supabase 
+  .from('redeemLog')
+  .delete()
+  .eq('coupon', coupon)
+}
+
+async function getRedeemLog(redeemID) {
+  const { data, error } = await supabase
+  .from('redeemLog')
+  .select()
+  .eq('id', redeemID)
+  return data
+}
+
+async function getRedeemLogByCoupon(coupon) {
+  const { data, error } = await supabase
+  .from('redeemLog')
+  .select()
+  .eq('coupon', coupon)
+  return data
 }
 
 async function addExchangePair(userID_a, serverID_a, balance_a, rate_a, userID_b, serverID_b, balance_b, rate_b, ) {
@@ -319,7 +446,7 @@ async function updateExchange(exID, amount, rate) {
 async function addFoExID(exID, foExID) {
   const { error } = await supabase
   .from('exchanges')
-  .update({foreignExID: foExID})
+  .update({foreignExchangeID: foExID})
   .eq('id', exID)
 }
 
@@ -525,6 +652,14 @@ function prettyDecimal(number) {
   return parseFloat(number)
 }
 
+function generateUID() {
+  var firstPart = (Math.random() * 46656) | 0;
+  var secondPart = (Math.random() * 46656) | 0;
+  firstPart = ("000" + firstPart.toString(36)).slice(-3);
+  secondPart = ("000" + secondPart.toString(36)).slice(-3);
+  return firstPart + secondPart;
+}
+
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 const superMajority = .66
@@ -534,6 +669,7 @@ client.on('ready', () => console.log(`${client.user.tag} has logged in!`));
 
 
 client.on('interactionCreate', async (interaction) => {
+  await interaction.deferReply({ephemeral: true});
   if (interaction.isChatInputCommand()) {
     const senderID = interaction.user.id
     const senderDisplayName = interaction.user.username
@@ -542,7 +678,7 @@ client.on('interactionCreate', async (interaction) => {
       const globalUserStats = await getUserGlobalStats(senderID)
       if (interaction.commandName === 'balance' || interaction.commandName === 'recent') {
         if (globalUserStats.length === 0) {
-          interaction.reply({content: "You are not in any groups. Go to a group's server and use '/join'", ephemeral: true})
+          interaction.editReply({content: "You are not in any groups. Go to a group's server and use '/join'", ephemeral: true})
         } else {
           if (interaction.commandName === 'balance') {
             let message = []
@@ -556,7 +692,7 @@ client.on('interactionCreate', async (interaction) => {
                 const serverDisplayName = (await client.guilds.fetch(globalUserStats[i].serverID)).name
                 message += (symbol + globalUserStats[i].balance + ' in ' + serverDisplayName + '\n')
               }
-              interaction.reply({content: message, ephemeral: true})
+              interaction.editReply({content: message, ephemeral: true})
             
           } else if (interaction.commandName === 'recent') {
             const currentDate = Date.now();
@@ -590,11 +726,11 @@ client.on('interactionCreate', async (interaction) => {
                 message += sentMessage + receivedMessage
               }
             }
-            interaction.reply({content: message, ephemeral: true})
+            interaction.editReply({content: message, ephemeral: true})
           }
         }
     } else {
-        interaction.reply({content: "Only the '/balance' and '/recent' commands work in DMs. Please go to your individual group to use the other commands.", ephemeral: true})
+        interaction.editReply({content: "Only the '/balance' and '/recent' commands work in DMs. Please go to your individual group to use the other commands.", ephemeral: true})
       }
     } else {
       const serverDisplayName = interaction.guild.name
@@ -603,7 +739,7 @@ client.on('interactionCreate', async (interaction) => {
       console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' in " + serverDisplayName + ' (' + serverID + ')')
       if (interaction.commandName === 'setup') {
         if (stats === null) {
-          interaction.reply({content: 'This server is not authorized to create a group', ephemeral: true})
+          interaction.editReply({content: 'This server is not authorized to create a group', ephemeral: true})
           return
         }
         if (interaction.member.roles.cache.has(stats.adminRoleID)) {
@@ -616,7 +752,7 @@ client.on('interactionCreate', async (interaction) => {
                 await interaction.member.roles.remove(interaction.options.getRole('general_role'))
               }
             } catch (error) {
-              interaction.reply({content: 'Please make sure the bot role is above the general role you just set (it currently is not).\n\nTo do this, go to Server Settings --> Roles and then drag the role for this bot to be above the <@&' + interaction.options.getRole('general_role') + '> role.\n\nOnce fixed, come back and run the setup command again.' , ephemeral: true});
+              interaction.editReply({content: 'Please make sure the bot role is above the general role you just set (it currently is not).\n\nTo do this, go to Server Settings --> Roles and then drag the role for this bot to be above the <@&' + interaction.options.getRole('general_role') + '> role.\n\nOnce fixed, come back and run the setup command again.' , ephemeral: true});
               return
             } 
             initUser(senderID, serverID, interaction.options.getNumber('income'))
@@ -625,38 +761,38 @@ client.on('interactionCreate', async (interaction) => {
             } else {
               setServerStats(serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'), interaction.options.getRole('general_role'),  interaction.options.getString('symbol'), null)
             }
-              interaction.reply({content: 'Server settings have been set!', ephemeral: true})
+              interaction.editReply({content: 'Server settings have been set!', ephemeral: true})
           } else {
-            interaction.reply({content: "Server has already been setup. Trying using '/update' instead", ephemeral: true})
+            interaction.editReply({content: "Server has already been setup. Trying using '/update' instead", ephemeral: true})
           }
         } else {
-          interaction.reply({content: 'Must be server admin', ephemeral: true})
+          interaction.editReply({content: 'Must be server admin', ephemeral: true})
         }
       } else if (stats.symbol !== null) {
         const symbol = stats.symbol
         if (interaction.commandName === 'join') {
           if (await userExists(senderID, serverID)) {
-            interaction.reply({content: 'You are already in this group', ephemeral: true})
+            interaction.editReply({content: 'You are already in this group', ephemeral: true})
           } else {
               requestToJoin(senderID, serverID)
-              interaction.reply({content: 'You have successfully requested to join the ' + serverDisplayName + ' group!', ephemeral: true})
+              interaction.editReply({content: 'You have successfully requested to join the ' + serverDisplayName + ' group!', ephemeral: true})
               interaction.member.send('You have successfully requested to join the ' + serverDisplayName + ' group!').catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you if you are accepted!', ephemeral: true})});
           }
         } else if (await userExists(senderID, serverID)) {
           if (interaction.commandName === 'balance') {
             const balance = await getUserBalance(senderID, serverID)
-            interaction.reply({content: 'Your current balance: ' + symbol + balance, ephemeral: true})
+            interaction.editReply({content: 'Your current balance: ' + symbol + balance, ephemeral: true})
           } else if (interaction.commandName === 'endorse') {
             const receiverID = interaction.options.getUser('user').id
             if (await hasRequested(receiverID, serverID)) {
               if (await alreadyEndorsed(senderID, receiverID, serverID)) {
-                interaction.reply({content: 'You have already endorsed <@' + receiverID + '>!', ephemeral: true})
+                interaction.editReply({content: 'You have already endorsed <@' + receiverID + '>!', ephemeral: true})
               } else {
                 const currentVotes = await getUserEndorsements(receiverID, serverID)
                 const numUsers = (await getUsers(serverID)).length
                 addEndorsement(receiverID, serverID, currentVotes + 1)
                 recordEndorsement(senderID, receiverID, serverID)
-                interaction.reply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
+                interaction.editReply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
                 if (((currentVotes + 1) > (simpleMajority * numUsers)) || (numUsers === 2 && currentVotes > 1)) {
                   try {
                     await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.add(String(stats.generalRoleID)).catch((err) => {console.log(err)});
@@ -672,7 +808,7 @@ client.on('interactionCreate', async (interaction) => {
                 } 
             }
           } else {
-            interaction.reply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
+            interaction.editReply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
           }
         } else if (interaction.commandName === 'send') {
           const receiverID = interaction.options.getUser('user').id
@@ -683,12 +819,12 @@ client.on('interactionCreate', async (interaction) => {
             const fee = prettyDecimal((amount * (stats.fee / 100)))
             const amountWithFee = prettyDecimal((amount + fee))
             if (senderCurrentBalance - amountWithFee < 0) {
-              interaction.reply({content: 'You currently have ' + symbol + senderCurrentBalance + ', but ' + symbol + amountWithFee + ' is needed to send the ' + symbol + amount + ' with the ' + symbol + fee + ' transaction fee.', ephemeral: true})
+              interaction.editReply({content: 'You currently have ' + symbol + senderCurrentBalance + ', but ' + symbol + amountWithFee + ' is needed to send the ' + symbol + amount + ' with the ' + stats.fee + '% transaction fee.', ephemeral: true})
             } else {
                 updateBalance(senderID, serverID, senderCurrentBalance - amountWithFee)
                 updateBalance(receiverID, serverID, receiverCurrentBalance + amount)
                 transactionLog(serverID, senderID, receiverID, amount, fee)
-                await interaction.reply({content: 'Sent ' + symbol + amount + ' to <@' + receiverID + '>, and a ' + symbol + fee + ' transaction fee was taken, totalling to ' + symbol + amountWithFee, ephemeral: true})
+                await interaction.editReply({content: 'Sent ' + symbol + amount + ' to <@' + receiverID + '>, and a ' + symbol + fee + ' transaction fee was taken, totalling to ' + symbol + amountWithFee, ephemeral: true})
                 interaction.options.getUser('user').send('<@' + senderID + '> has sent you ' + symbol + amount + ' in the ' + serverDisplayName + ' group').catch((err) => {
                   if (stats.feedChannel === null || stats.feedChannel === '') {
                     interaction.followUp({content: 'The transaction was successfully sent but <@' + receiverID + '> is unable to receive DMs and the feed channel is turned off for this group.\n\nThis means <@' + receiverID + '> has no way of being notified of this transaction. Just a heads up!', ephemeral: true})
@@ -707,56 +843,56 @@ client.on('interactionCreate', async (interaction) => {
                 }
               }
           } else if (receiverID === senderID) {
-            interaction.reply({content: 'You cannot send to yourself!', ephemeral: true})
+            interaction.editReply({content: 'You cannot send to yourself!', ephemeral: true})
           } else {
-            interaction.reply({content: '<@' + receiverID + "> has not joined the group. They can join with '/join'" , ephemeral: true})
+            interaction.editReply({content: '<@' + receiverID + "> has not joined the group. They can join with '/join'" , ephemeral: true})
           }
           } else if (interaction.commandName === 'vote') {
             if (stats.voteOpen) {
               if (interaction.options.getNumber('fee') > 100) {
-                interaction.reply({content: 'Fee cannot be greater than 100%!', ephemeral: true})
+                interaction.editReply({content: 'Fee cannot be greater than 100%!', ephemeral: true})
               } else {
                 const numUsers = (await getUsers(serverID)).length
                 const votes = await tally(serverID)
                 if (await userVoted(senderID, serverID)) {
                   updateVote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
-                  interaction.reply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been updated!', ephemeral: true})
+                  interaction.editReply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been updated!', ephemeral: true})
                 } else {
                   if ((votes[0].length + 1) > (superMajority * numUsers)) {
                     acceptVotes(serverID, votes[0].fee, votes[0].income)
                     clearVotes(serverID)
-                    interaction.reply({content: 'Your vote has reached a super majority and the votes have been accepted!\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' +  symbol + votes[0].income + ' daily income', ephemeral: true})
+                    interaction.editReply({content: 'Your vote has reached a super majority and the votes have been accepted!\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' +  symbol + votes[0].income + ' daily income', ephemeral: true})
                   } else {
                     vote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
-                    interaction.reply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been recorded!', ephemeral: true})
+                    interaction.editReply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been recorded!', ephemeral: true})
                   }
                 }
               }
             } else {
-              interaction.reply({content: 'Voting is currently closed', ephemeral: true})
+              interaction.editReply({content: 'Voting is currently closed', ephemeral: true})
             }
         } else if (interaction.commandName === 'tally') {
           const votes = await tally(serverID)
           if (isNaN(votes[0].fee)) {
-            interaction.reply({content: "No votes have been recorded yet. Try voting by typing '/vote'", ephemeral: true})
+            interaction.editReply({content: "No votes have been recorded yet. Try voting by typing '/vote'", ephemeral: true})
           } else {
-            interaction.reply({content: votes[0].length + ' votes so far, result would be a ' + votes[0].fee + '% transaction fee and a ' + symbol + votes[0].income + ' daily income', ephemeral: true})
+            interaction.editReply({content: votes[0].length + ' votes so far, result would be a ' + votes[0].fee + '% transaction fee and a ' + symbol + votes[0].income + ' daily income', ephemeral: true})
           }
         } else if (interaction.commandName === 'rates') {
-          interaction.reply({content: 'Current rates:\n' + stats.fee + '% transaction fee\n' +  symbol + stats.income + ' daily income', ephemeral: true})
+          interaction.editReply({content: 'Current rates:\n' + stats.fee + '% transaction fee\n' +  symbol + stats.income + ' daily income', ephemeral: true})
         } else if (interaction.commandName === 'accept_votes') {
           if (interaction.member.roles.cache.has(stats.adminRoleID)) {
             const votes = await tally(serverID)
             if (isNaN(votes[0].fee)) {
-              interaction.reply({content: 'No votes have been recorded.', ephemeral: true})
+              interaction.editReply({content: 'No votes have been recorded.', ephemeral: true})
             } else {
               const votes = await tally(serverID)
               acceptVotes(serverID, votes[0].fee, votes[0].income)
               clearVotes(serverID)
-              interaction.reply({content: votes[0].length + ' votes have been accepted and the new rates are now active.\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' +  symbol + votes[0].income + ' daily income', ephemeral: true})
+              interaction.editReply({content: votes[0].length + ' votes have been accepted and the new rates are now active.\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' +  symbol + votes[0].income + ' daily income', ephemeral: true})
             }
           } else {
-            interaction.reply({content: 'Must be server admin', ephemeral: true})
+            interaction.editReply({content: 'Must be server admin', ephemeral: true})
           }
         } else if (interaction.commandName === 'update') {
           if (interaction.member.roles.cache.has(stats.adminRoleID)) {
@@ -769,57 +905,57 @@ client.on('interactionCreate', async (interaction) => {
                   await interaction.member.roles.remove(interaction.options.getRole('general_role'))
                 }
               } catch (error) {
-                interaction.reply({content: 'Please make sure the bot role is above the general role you just set (it currently is not).\n\nTo do this, go to Server Settings --> Roles and then drag the role for this bot to be above the <@&' + interaction.options.getRole('general_role') + '> role.\n\nOnce fixed, come back and run the update command again.' , ephemeral: true});
+                interaction.editReply({content: 'Please make sure the bot role is above the general role you just set (it currently is not).\n\nTo do this, go to Server Settings --> Roles and then drag the role for this bot to be above the <@&' + interaction.options.getRole('general_role') + '> role.\n\nOnce fixed, come back and run the update command again.' , ephemeral: true});
                 return
               } 
             }
             await updateServer(serverID, interaction.options.getRole('general_role'), interaction.options.getString('symbol'), interaction.options.getChannel('feed_channel'), interaction.options.getBoolean('remove_feed'))
             const updatedStats = await getServerStats(serverID)
             if (updatedStats.feedChannel === null) {
-              interaction.reply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: None', ephemeral: true})
+              interaction.editReply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: None', ephemeral: true})
             } else {
-              interaction.reply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: <#' + updatedStats.feedChannel + '>', ephemeral: true})
+              interaction.editReply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nSymbol: ' + updatedStats.symbol + '\nFeed channel: <#' + updatedStats.feedChannel + '>', ephemeral: true})
             }
           } else {
-            interaction.reply({content: 'Must be server admin', ephemeral: true})
+            interaction.editReply({content: 'Must be server admin', ephemeral: true})
           }
       } else if (interaction.commandName === 'settings') {
         if (stats.feedChannel === null) {
-          interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: None', ephemeral: true})
+          interaction.editReply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: None', ephemeral: true})
         } else {
-          interaction.reply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: <#' + stats.feedChannel + '>', ephemeral: true})
+          interaction.editReply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nSymbol: ' + stats.symbol + '\nFeed channel: <#' + stats.feedChannel + '>', ephemeral: true})
         }     
         } else if (interaction.commandName === 'my_vote') {
         const myVote = await checkMyVote(senderID, serverID)
         if ((myVote[0].fee).length === 0) {
-          interaction.reply({content: "You haven't voted in the current round. Submit a vote with '/vote'", ephemeral: true})
+          interaction.editReply({content: "You haven't voted in the current round. Submit a vote with '/vote'", ephemeral: true})
         } else {
-          interaction.reply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a ' + symbol + myVote[0].income + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
+          interaction.editReply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a ' + symbol + myVote[0].income + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
         }
         } else if (interaction.commandName === 'stats') {
           const currentDate = Date.now();
-          const volume = roundUp(await getVolume(serverID, currentDate - 604800000, currentDate))
+          const volume = await getVolume(serverID, currentDate - 604800000, currentDate)
           const gini = roundUp(await computeGiniIndex(serverID))
           const numUsers = (await getUsers(serverID)).length
           const serverMoneySupply = roundUp(await moneySupply(serverID))
-          interaction.reply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + volume.volume + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
+          interaction.editReply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + symbol + serverMoneySupply + '\nTransaction volume (last 7 days): ' + symbol + roundUp(volume.volume) + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: ' +  symbol + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
         } else if (interaction.commandName === 'candidates') {
           const candidates = await viewCandidates(serverID)
           let message = 'Current candidates:\n\n'
           if (candidates.length === 0) {
-            interaction.reply({content: "There are no current candidates for this group", ephemeral: true})
+            interaction.editReply({content: "There are no current candidates for this group", ephemeral: true})
           } else {
             for (let i = 0; i < candidates.length; i += 1) {
               message += ('<@' + candidates[i].userID + '>\n')
             }
             message += "\nUse '/endorse' to endorse any of the above candidates!"
-            interaction.reply({content: message, ephemeral: true})
+            interaction.editReply({content: message, ephemeral: true})
           }
         } else if (interaction.commandName === 'strike') {
           const receiverID = interaction.options.getUser('user').id
           if (await userExists(receiverID, serverID)) {
             if (await strikeAlreadyGiven(senderID, receiverID, serverID)) {
-              interaction.reply({content: 'You have already given a strike to <@' + receiverID + '>', ephemeral: true})
+              interaction.editReply({content: 'You have already given a strike to <@' + receiverID + '>', ephemeral: true})
             } else {
               const numUsers = (await getUsers(serverID)).length
               const strikes = await getStrikes(receiverID, serverID)
@@ -829,21 +965,21 @@ client.on('interactionCreate', async (interaction) => {
                 terminateUser(receiverID, serverID)
                 clearStrikes(receiverID, serverID)
                 await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.remove(String(stats.generalRoleID)).catch((err) => {console.log(err)});
-                interaction.reply({content: 'You have successfully given a strike to <@' + receiverID + '> which has voted them out of the group', ephemeral: true})
+                interaction.editReply({content: 'You have successfully given a strike to <@' + receiverID + '> which has voted them out of the group', ephemeral: true})
                 interaction.options.getUser('user').send('You have been voted out of the ' + serverDisplayName + " group. You can request to join back in by going to the group's server and using '/join'").catch((err) => {});
               } else {
-                interaction.reply({content: 'You have successfully given a strike to <@' + receiverID + '>', ephemeral: true})
+                interaction.editReply({content: 'You have successfully given a strike to <@' + receiverID + '>', ephemeral: true})
               }
             }
           } else {
-            interaction.reply({content: '<@' + receiverID + '> is not in this group', ephemeral: true})
+            interaction.editReply({content: '<@' + receiverID + '> is not in this group', ephemeral: true})
           }
         } else if (interaction.commandName === 'recent') {
           const currentDate = Date.now();
           const sent = await getUserSentTransactions(senderID, serverID, currentDate - 604800000, currentDate)
           const received = await getUserReceivedTransactions(senderID, serverID, currentDate - 604800000, currentDate)
           if ((sent.length === 0) && (received.length == 0)) {
-            interaction.reply({content: "You've had no transactions in the past week", ephemeral: true})
+            interaction.editReply({content: "You've had no transactions in the past week", ephemeral: true})
           } else {
             let sentMessage = 'Sent:\n'
             for (let i = 0; i < sent.length; i += 1) {
@@ -860,7 +996,7 @@ client.on('interactionCreate', async (interaction) => {
             if (received.length === 0) {
               receivedMessage = ''
             }
-            interaction.reply({content: sentMessage + receivedMessage, ephemeral: true})
+            interaction.editReply({content: sentMessage + receivedMessage, ephemeral: true})
           }
         } else if (interaction.commandName === 'add_exchange') {
           const userExchanges = await getExchanges(senderID, serverID)
@@ -869,10 +1005,10 @@ client.on('interactionCreate', async (interaction) => {
           if (amount <= balance) {
             if (userExchanges.length > 0) {
               for (let i = 0; i < userExchanges.length; i += 1) {
-                const foExID = (await getExchangeByID(userExchanges[i].id))[0].foreignExID
+                const foExID = (await getExchangeByID(userExchanges[i].id))[0].foreignExchangeID
                 const pairing = await getExchangeByID(foExID)
                 if ((userExchanges[i].serverID == serverID) && (pairing[0].serverID == interaction.options.getString('server'))) {
-                  interaction.reply({content: 'You have already created an exchange for this pairing', ephemeral: true})
+                  interaction.editReply({content: 'You have already created an exchange for this pairing', ephemeral: true})
                   return
                 }
               }
@@ -881,9 +1017,9 @@ client.on('interactionCreate', async (interaction) => {
             addFoExID(newExPair[0].id, newExPair[1].id)
             addFoExID(newExPair[1].id, newExPair[0].id)
             updateBalance(senderID, serverID, balance - amount)
-            interaction.reply({content: "Your exchange has been added! The user you set will need to fund their side by using '/fund_exchange'", ephemeral: true})
+            interaction.editReply({content: "Your exchange has been added! The user you set will need to fund their side by using '/fund_exchange'", ephemeral: true})
           } else {
-            interaction.reply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
+            interaction.editReply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
           }
         } else if (interaction.commandName === 'fund_exchange') {
           const userExchanges = await getExchanges(senderID, serverID)
@@ -892,21 +1028,21 @@ client.on('interactionCreate', async (interaction) => {
           if (amount <= balance) {
             if (userExchanges.length > 0) {
               for (let i = 0; i < userExchanges.length; i += 1) {
-                const foExID = (await getExchangeByID(userExchanges[i].id))[0].foreignExID
+                const foExID = (await getExchangeByID(userExchanges[i].id))[0].foreignExchangeID
                 const pairing = await getExchangeByID(foExID)
                 if ((userExchanges[i].serverID == serverID) && (pairing[0].serverID == interaction.options.getString('server')) && (pairing[0].userID == interaction.options.getString('user'))) {
                   const currentExchangeBalance = userExchanges[i].balance
                   updateExchange(userExchanges[i].id, currentExchangeBalance + amount, interaction.options.getNumber('rate'))
                   updateBalance(senderID, serverID, balance - amount)
-                  interaction.reply({content: "Your exchange pairing has been successfully updated!", ephemeral: true})
+                  interaction.editReply({content: "Your exchange pairing has been successfully updated!", ephemeral: true})
                 }
               }
             } else {
-              interaction.reply({content: "There is no exchange pair for you to fund. Create your own exchange with another user by using '/add_exchange'", ephemeral: true})
+              interaction.editReply({content: "There is no exchange pair for you to fund. Create your own exchange with another user by using '/add_exchange'", ephemeral: true})
             }
             
           } else {
-            interaction.reply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
+            interaction.editReply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
           }
         } else if (interaction.commandName === 'exchanges') {
           const serverExchanges = await getExchangesByServer(serverID)
@@ -916,25 +1052,179 @@ client.on('interactionCreate', async (interaction) => {
           } else if (serverExchanges.length > 1) {
             message = serverDisplayName + ' has ' + serverExchanges.length + ' exchanges:\n\n'
           } else {
-            interaction.reply({content: "This group has no exchanges. Add your own with '/add_exchange'", ephemeral: true})
+            interaction.editReply({content: "This group has no exchanges. Create your own with '/add_exchange'", ephemeral: true})
             return
           }
           for (let i = 0; i < serverExchanges.length; i += 1) {
-            const foExID = (await getExchangeByID(serverExchanges[i].id))[0].foreignExID
+            const foExID = (await getExchangeByID(serverExchanges[i].id))[0].foreignExchangeID
             const pairing = await getExchangeByID(foExID)
             const foreignSymbol = (await getServerStats(pairing[0].serverID)).symbol
             message += '<@' + serverExchanges[i].userID + '> has funded ' + symbol + serverExchanges[i].balance + ' for ' + (await client.guilds.fetch(pairing[0].serverID)).name + ' (' + foreignSymbol + ')' + ' with a rate of ' + serverExchanges[i].rate + '\n'
           }
-          interaction.reply({content: message, ephemeral: true})
+          interaction.editReply({content: message, ephemeral: true})
+        } else if (interaction.commandName === 'transfer') {
+          const balance = await getUserBalance(senderID, serverID)
+          const foreignAmount = interaction.options.getNumber('amount')
+          const receiverID = interaction.options.getString('server')
+          const exchanges = await validExchangePairs(serverID, receiverID)
+          if (!exchanges) {
+            interaction.editReply({content: 'There are no active exchange pairs for this transfer', ephemeral: true})
+          } else {
+            let usableExchanges = []
+            for (let i = 0; i < exchanges.length; i += 1) { 
+              if (foreignAmount <= exchanges[i].foreignBalance) {
+                usableExchanges.push(exchanges[i])
+              }
+            }
+            if (usableExchanges.length === 0) {
+              interaction.editReply({content: 'There are no exchanges pairs with enough liquidity for this transfer', ephemeral: true})
+            } else {
+              const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
+              const amount = foreignAmount * bestRoute.rate
+              const fee = prettyDecimal((amount * (stats.fee / 100)))
+              const amountWithFee = prettyDecimal((amount + fee))
+              if (amountWithFee <= balance) {
+                const redeemable = foreignAmount
+                const foreignSymbol = (await getServerStats(receiverID)).symbol
+                const receiverDisplayName = (await client.guilds.fetch(receiverID)).name
+                const row = new ActionRowBuilder()
+                  .addComponents(
+                    new ButtonBuilder()
+                      .setCustomId('coupon')
+                      .setLabel('Generate Payment Coupon')
+                      .setStyle(ButtonStyle.Primary),
+                  );
+                const coupon = generateUID()
+                while (true) {
+                  if (!(await couponExists(coupon))) {
+                    break
+                  }
+                }
+                const remittanceID = (await addRemittance(senderID, receiverID, coupon, amount, fee, serverID))[0].id
+                const embed = new EmbedBuilder()
+                  .setColor(0x0099FF)
+                  .setTitle('Transfer')
+                  .setDescription('The best route will cost you ' + symbol + amountWithFee + ' and will be able to be redeemed for ' + foreignSymbol + redeemable + ' in ' + receiverDisplayName)
+                  .setFooter({ text: String(remittanceID)});
+                await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
+              } else {
+                interaction.editReply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amountWithFee + ' is needed to send the ' + symbol + amount + ' with the ' + stats.fee + '% transaction fee.', ephemeral: true})
+              }
+            }
+          }
+        } else if (interaction.commandName === 'redeem') {
+          const coupon = await getCoupon(interaction.options.getString('coupon'))
+          if (await couponExists(interaction.options.getString('coupon'))) {
+            if (coupon[0].funded) {
+              if (await userExists(senderID, coupon[0].serverID)) {
+                const exchanges = await validExchangePairs(coupon[0].originServerID, coupon[0].serverID)
+                if (!exchanges) {
+                  interaction.editReply({content: 'There are no active exchange pairs for this transfer', ephemeral: true})
+                } else {
+                  let usableExchanges = []
+                  for (let i = 0; i < exchanges.length; i += 1) { 
+                    if ((coupon[0].amount / exchanges[i].rate) <= exchanges[i].foreignBalance) {
+                      usableExchanges.push(exchanges[i])
+                    }
+                  }
+                  if (usableExchanges.length === 0) {
+                    interaction.editReply({content: 'There are no exchanges pairs with enough liquidity for this transfer', ephemeral: true})
+                  } else {
+                    const stats = await getServerStats(coupon[0].serverID)
+                    const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
+                    const amount = coupon[0].amount / bestRoute.rate
+                    const fee = prettyDecimal((amount * (stats.fee / 100)))
+                    const redeemable = amount - fee
+                    const redeemLog = await getRedeemLogByCoupon(coupon[0].coupon)
+                    let redeemID
+                    if (redeemLog.length > 0) {
+                      redeemID = redeemLog[0].id
+                    } else {
+                      redeemID = (await addRedeemLog(senderID, coupon[0].coupon, amount - fee, bestRoute.exID))[0].id
+                    }
+                    const row = new ActionRowBuilder()
+                      .addComponents(
+                        new ButtonBuilder()
+                          .setCustomId('confirm_exchange')
+                          .setLabel('Confirm Transaction')
+                          .setStyle(ButtonStyle.Success))
+                      .addComponents(
+                        new ButtonBuilder()
+                          .setCustomId('decline_exchange')
+                          .setLabel('Decline Transaction')
+                          .setStyle(ButtonStyle.Danger));
+                    const embed = new EmbedBuilder()
+                      .setColor(0x0099FF)
+                      .setTitle('Redeem')
+                      .setDescription('With the best available route and after the ' + stats.fee + '% transaction fee is taken, you will be able to redeem ' + symbol + redeemable)
+                      .setFooter({ text: String(redeemID)});
+                    await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
+                  }
+                }
+              } else {
+                interaction.editReply({content: 'You are not a member of the group that this currency is exchanging into', ephemeral: true})
+              }
+            } else {
+              interaction.editReply({content: 'This coupon has not been funded by the sender', ephemeral: true})
+            }
+          } else {
+            interaction.editReply({content: 'This coupon is either invalid or has expired', ephemeral: true})
+          }
         }
       } else {
-          interaction.reply({content: "Please request to join the group by typing '/join' if you have not already", ephemeral: true})
+          interaction.editReply({content: "Please request to join the group by typing '/join' if you have not already", ephemeral: true})
         }
       } else {
-          interaction.reply({content: 'Server settings have not been setup yet. Contact server admin!', ephemeral: true})
+          interaction.editReply({content: 'Server settings have not been setup yet. Contact server admin!', ephemeral: true})
       }    
     }
-}});
+} else if (interaction.isButton()) {
+  if (interaction.customId === 'coupon') {
+    const remittanceID = parseInt(interaction.message.embeds[0].data.footer.text)
+    const remittance = await getRemittance(remittanceID)
+    if (remittance.length === 0) {
+      interaction.editReply({content: "Your transfer has expired. Please use '/transfer' to initiate a new transfer", ephemeral: true})
+    } else {
+      const coupon = await getCoupon(remittance[0].coupon)
+      if (!coupon[0].funded) {
+        const currentBalance = await getUserBalance(interaction.user.id, interaction.guildId)
+        const amountWithFee =  remittance[0].amount + remittance[0].fee
+        updateBalance(interaction.user.id, interaction.guildId, currentBalance - amountWithFee)
+        fundCoupon(remittance[0].coupon)
+      }
+      interaction.editReply({content: 'Your payment coupon is: ' + remittance[0].coupon + ' and will expire in 5 minutes', ephemeral: true})
+    }
+  } else if (interaction.customId === 'confirm_exchange') {
+    const redeemID = parseInt(interaction.message.embeds[0].data.footer.text)
+    if (await redeemLogExists(redeemID)) {
+      const redeemLog = await getRedeemLog(redeemID)
+      const coupon = await getCoupon(redeemLog[0].coupon)
+      const balance = await getUserBalance(interaction.user.id, coupon[0].serverID)
+      const exchange_a = await getExchangeByID(redeemLog[0].exchangeID)
+      const exchange_b = await getExchangeByID(exchange_a[0].foreignExchangeID)
+      const stats = await getServerStats(coupon[0].serverID)
+      const serverDisplayName = (await client.guilds.fetch(coupon[0].serverID)).name
+      updateBalance(interaction.user.id, coupon[0].serverID, balance + redeemLog[0].amount)
+      updateExchange(exchange_a[0].id, exchange_a[0].balance - (redeemLog[0].amount / ((100 - stats.fee)/100)), exchange_a[0].rate)
+      updateExchange(exchange_b[0].id, exchange_b[0].balance + coupon[0].amount, exchange_b[0].rate)
+      deleteCoupon(coupon[0].coupon)
+      deleteRedeemLog(coupon[0].coupon)
+      interaction.editReply({content: 'Your redemption was successful. Your current balance in ' + serverDisplayName + ' is: ' + stats.symbol + (balance + redeemLog[0].amount), ephemeral: true})
+    } else {
+      interaction.editReply({content: 'This payment is either expired or has already been claimed', ephemeral: true})
+    }
+  } else if (interaction.customId === 'decline_exchange') {
+    const redeemID = parseInt(interaction.message.embeds[0].data.footer.text)
+    if (await redeemLogExists(redeemID)) {
+      const redeemLog = await getRedeemLog(redeemID)
+      const coupon = await getCoupon(redeemLog[0].coupon)
+      deleteRedeemLog(coupon[0].coupon)
+    }
+    interaction.editReply({content: 'The redemption has been declined', ephemeral: true})
+  }
+}
+
+});
 
 export async function main() {
 
@@ -956,7 +1246,9 @@ export async function main() {
     RecentCommand,
     AddExchangeCommand,
     FundExchangeCommand,
-    ExchangesCommand
+    ExchangesCommand,
+    TransferCommand,
+    RedeemCommand
   ];
 
     try {
@@ -981,3 +1273,4 @@ export async function main() {
 
 main()
 runPayments()
+checkCoupons()
