@@ -727,12 +727,72 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isChatInputCommand()) {
     const senderID = interaction.user.id
     const senderDisplayName = interaction.user.username
+    if (interaction.commandName === 'redeem') {
+      const coupon = await getCoupon(interaction.options.getString('coupon'))
+      const foreignStats = await getServerStats(coupon[0].serverID)
+          if (await couponExists(interaction.options.getString('coupon'))) {
+            if (coupon[0].funded) {
+              if (await userExists(senderID, coupon[0].serverID)) {
+                const exchanges = await validExchangePairs(coupon[0].originServerID, coupon[0].serverID)
+                if (!exchanges) {
+                  interaction.editReply({content: 'There are no active exchange pairs for this transfer', ephemeral: true})
+                } else {
+                  let usableExchanges = []
+                  for (let i = 0; i < exchanges.length; i += 1) { 
+                    if ((coupon[0].amount / exchanges[i].rate) <= exchanges[i].foreignBalance) {
+                      usableExchanges.push(exchanges[i])
+                    }
+                  }
+                  if (usableExchanges.length === 0) {
+                    interaction.editReply({content: 'There are no exchanges pairs with enough liquidity for this transfer', ephemeral: true})
+                  } else {
+                    const stats = await getServerStats(coupon[0].serverID)
+                    const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
+                    const amount = prettyDecimal(coupon[0].amount / bestRoute.rate)
+                    const fee = prettyDecimal((amount * (stats.fee / 100)))
+                    const redeemable = amount - fee
+                    const redeemLog = await getRedeemLogByCoupon(coupon[0].coupon)
+                    let redeemID
+                    if (redeemLog.length > 0) {
+                      redeemID = redeemLog[0].id
+                    } else {
+                      redeemID = (await addRedeemLog(senderID, coupon[0].coupon, amount - fee, bestRoute.exID, coupon[0].originServerID, coupon[0].serverID))[0].id
+                    }
+                    const row = new ActionRowBuilder()
+                      .addComponents(
+                        new ButtonBuilder()
+                          .setCustomId('confirm_exchange')
+                          .setLabel('Confirm Transaction')
+                          .setStyle(ButtonStyle.Success))
+                      .addComponents(
+                        new ButtonBuilder()
+                          .setCustomId('decline_exchange')
+                          .setLabel('Decline Transaction')
+                          .setStyle(ButtonStyle.Danger));
+                    const embed = new EmbedBuilder()
+                      .setColor(0x0099FF)
+                      .setTitle('Redeem')
+                      .setDescription('With the best available route and after the ' + stats.fee + '% transaction fee is taken, you will be able to redeem ' + foreignStats.symbol + redeemable)
+                      .setFooter({ text: String(redeemID)});
+                    await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
+                  }
+                }
+              } else {
+                interaction.editReply({content: 'You are not a member of the group that this currency is exchanging into', ephemeral: true})
+              }
+            } else {
+              interaction.editReply({content: 'This coupon has not been funded by the sender', ephemeral: true})
+            }
+          } else {
+            interaction.editReply({content: 'This coupon is either invalid or has expired', ephemeral: true})
+          }
+    }
     if (interaction.guildId == null) {
       console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' via DM")
       const globalUserStats = await getUserGlobalStats(senderID)
       if (interaction.commandName === 'balance' || interaction.commandName === 'recent') {
         if (globalUserStats.length === 0) {
-          interaction.editReply({content: "You are n  ot in any groups. Go to a group's server and use '/join'", ephemeral: true})
+          interaction.editReply({content: "You are not in any groups. Go to a group's server and use '/join'", ephemeral: true})
         } else {
           if (interaction.commandName === 'balance') {
             let message = []
@@ -747,7 +807,6 @@ client.on('interactionCreate', async (interaction) => {
                 message += (symbol + globalUserStats[i].balance + ' in ' + serverDisplayName + '\n')
               }
               interaction.editReply({content: message, ephemeral: true})
-            
           } else if (interaction.commandName === 'recent') {
             const currentDate = Date.now();
             let message = ''
@@ -803,7 +862,7 @@ client.on('interactionCreate', async (interaction) => {
             interaction.editReply({content: message, ephemeral: true})
           }
         }
-    } else {
+    } else if (interaction.commandName !== 'redeem') {
         interaction.editReply({content: "Only the '/balance' and '/recent' commands work in DMs. Please go to your individual group to use the other commands.", ephemeral: true})
       }
     } else {
@@ -1212,64 +1271,6 @@ client.on('interactionCreate', async (interaction) => {
                 interaction.editReply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amountWithFee + ' is needed to send the ' + symbol + amount + ' with the ' + stats.fee + '% transaction fee.', ephemeral: true})
               }
             }
-          }
-        } else if (interaction.commandName === 'redeem') {
-          const coupon = await getCoupon(interaction.options.getString('coupon'))
-          if (await couponExists(interaction.options.getString('coupon'))) {
-            if (coupon[0].funded) {
-              if (await userExists(senderID, coupon[0].serverID)) {
-                const exchanges = await validExchangePairs(coupon[0].originServerID, coupon[0].serverID)
-                if (!exchanges) {
-                  interaction.editReply({content: 'There are no active exchange pairs for this transfer', ephemeral: true})
-                } else {
-                  let usableExchanges = []
-                  for (let i = 0; i < exchanges.length; i += 1) { 
-                    if ((coupon[0].amount / exchanges[i].rate) <= exchanges[i].foreignBalance) {
-                      usableExchanges.push(exchanges[i])
-                    }
-                  }
-                  if (usableExchanges.length === 0) {
-                    interaction.editReply({content: 'There are no exchanges pairs with enough liquidity for this transfer', ephemeral: true})
-                  } else {
-                    const stats = await getServerStats(coupon[0].serverID)
-                    const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
-                    const amount = prettyDecimal(coupon[0].amount / bestRoute.rate)
-                    const fee = prettyDecimal((amount * (stats.fee / 100)))
-                    const redeemable = amount - fee
-                    const redeemLog = await getRedeemLogByCoupon(coupon[0].coupon)
-                    let redeemID
-                    if (redeemLog.length > 0) {
-                      redeemID = redeemLog[0].id
-                    } else {
-                      redeemID = (await addRedeemLog(senderID, coupon[0].coupon, amount - fee, bestRoute.exID, coupon[0].originServerID, coupon[0].serverID))[0].id
-                    }
-                    const row = new ActionRowBuilder()
-                      .addComponents(
-                        new ButtonBuilder()
-                          .setCustomId('confirm_exchange')
-                          .setLabel('Confirm Transaction')
-                          .setStyle(ButtonStyle.Success))
-                      .addComponents(
-                        new ButtonBuilder()
-                          .setCustomId('decline_exchange')
-                          .setLabel('Decline Transaction')
-                          .setStyle(ButtonStyle.Danger));
-                    const embed = new EmbedBuilder()
-                      .setColor(0x0099FF)
-                      .setTitle('Redeem')
-                      .setDescription('With the best available route and after the ' + stats.fee + '% transaction fee is taken, you will be able to redeem ' + symbol + redeemable)
-                      .setFooter({ text: String(redeemID)});
-                    await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
-                  }
-                }
-              } else {
-                interaction.editReply({content: 'You are not a member of the group that this currency is exchanging into', ephemeral: true})
-              }
-            } else {
-              interaction.editReply({content: 'This coupon has not been funded by the sender', ephemeral: true})
-            }
-          } else {
-            interaction.editReply({content: 'This coupon is either invalid or has expired', ephemeral: true})
           }
         }
       } else {
