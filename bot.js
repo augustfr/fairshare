@@ -1,5 +1,6 @@
 import { config } from 'dotenv';
 import { runPayments } from './dailyPayments.js'
+import { sendMessage } from './dailyPayments.js'
 import { checkCoupons } from './couponChecker.js'
 import {
   Client,
@@ -164,11 +165,11 @@ async function recordEndorsement(senderID, receiverID, serverID) {
   .insert({senderID: senderID, receiverID: receiverID, serverID: serverID})
 }
 
-async function addRemittance(senderID, serverID, coupon, amount, fee, originServerID) {
+async function addRemittance(senderID, serverID, coupon, amount, fee, originServerID, message) {
   const currentDate = new Date();
   const { data, error } = await supabase
   .from('remittance')
-  .insert({senderID: senderID, serverID: serverID, coupon: coupon, creationDate: currentDate, amount: amount, fee: fee, originServerID: originServerID})
+  .insert({senderID: senderID, serverID: serverID, coupon: coupon, creationDate: currentDate, amount: amount, fee: fee, originServerID: originServerID, message: message})
   .select()
   return data
 }
@@ -731,7 +732,7 @@ client.on('interactionCreate', async (interaction) => {
       const globalUserStats = await getUserGlobalStats(senderID)
       if (interaction.commandName === 'balance' || interaction.commandName === 'recent') {
         if (globalUserStats.length === 0) {
-          interaction.editReply({content: "You are not in any groups. Go to a group's server and use '/join'", ephemeral: true})
+          interaction.editReply({content: "You are n  ot in any groups. Go to a group's server and use '/join'", ephemeral: true})
         } else {
           if (interaction.commandName === 'balance') {
             let message = []
@@ -1200,7 +1201,7 @@ client.on('interactionCreate', async (interaction) => {
                     break
                   }
                 }
-                const remittanceID = (await addRemittance(senderID, receiverID, coupon, amount, fee, serverID))[0].id
+                const remittanceID = (await addRemittance(senderID, receiverID, coupon, amount, fee, serverID, interaction.options.getString('message')))[0].id
                 const embed = new EmbedBuilder()
                   .setColor(0x0099FF)
                   .setTitle('Transfer')
@@ -1287,12 +1288,27 @@ client.on('interactionCreate', async (interaction) => {
     } else {
       const coupon = await getCoupon(remittance[0].coupon)
       if (!coupon[0].funded) {
+        const stats = await getServerStats(interaction.guildId)
         const currentBalance = await getUserBalance(interaction.user.id, interaction.guildId)
         const amountWithFee =  remittance[0].amount + remittance[0].fee
+        const serverDisplayName = (await client.guilds.fetch(coupon[0].serverID)).name
         updateBalance(interaction.user.id, interaction.guildId, currentBalance - amountWithFee)
         fundCoupon(remittance[0].coupon)
+        interaction.editReply({content: 'Your payment coupon is: ' + remittance[0].coupon + ' and will expire in 5 minutes', ephemeral: true})
+        if (stats.feedChannel !== null && stats.feedChannel !== '') {
+          try {
+            if (coupon[0].message !== null) {
+              await sendMessage('<@' + interaction.user.id + '> started an external payment to ' + serverDisplayName + ' for ' + coupon[0].message, stats.feedChannel)
+            } else {
+              await sendMessage('<@' + interaction.user.id + '> started an external payment to ' + serverDisplayName, stats.feedChannel)
+            }
+          } catch (error) {
+            interaction.followUp({content: 'Payment was successfully created but is unable to be sent into the assigned feed channel. Let server admin know.', ephemeral: true})
+          } 
+        }
+      } else {
+        interaction.editReply({content: 'Your payment coupon is: ' + remittance[0].coupon + ' and will expire in 5 minutes', ephemeral: true})
       }
-      interaction.editReply({content: 'Your payment coupon is: ' + remittance[0].coupon + ' and will expire in 5 minutes', ephemeral: true})
     }
   } else if (interaction.customId === 'confirm_exchange') {
     const redeemID = parseInt(interaction.message.embeds[0].data.footer.text)
@@ -1305,6 +1321,7 @@ client.on('interactionCreate', async (interaction) => {
         const exchange_b = await getExchangeByID(exchange_a[0].foreignExchangeID)
         const stats = await getServerStats(coupon[0].serverID)
         const serverDisplayName = (await client.guilds.fetch(coupon[0].serverID)).name
+        const foreignDisplayName = (await client.guilds.fetch(coupon[0].originServerID)).name
         const amount =  redeemLog[0].amount
         const fee = (100 - stats.fee)/100
         updateBalance(interaction.user.id, coupon[0].serverID, balance + amount)
@@ -1313,6 +1330,17 @@ client.on('interactionCreate', async (interaction) => {
         couponRedeemed(coupon[0].coupon)
         redeemed(redeemID)
         interaction.editReply({content: 'Your redemption was successful. Your current balance in ' + serverDisplayName + ' is: ' + stats.symbol + (balance + redeemLog[0].amount), ephemeral: true})
+        if (stats.feedChannel !== null && stats.feedChannel !== '') {
+          try {
+            if (coupon[0].message !== null) {
+              await sendMessage('<@' + interaction.user.id + '> has accepted an external payment from ' + foreignDisplayName + ' for ' + coupon[0].message, stats.feedChannel)
+            } else {
+              await sendMessage('<@' + interaction.user.id + '> has accepted an external payment from ' + foreignDisplayName, stats.feedChannel)
+            }
+          } catch (error) {
+            interaction.followUp({content: 'Payment was successfully created but is unable to be sent into the assigned feed channel. Let server admin know.', ephemeral: true})
+          } 
+        }
       } else {
         interaction.editReply({content: 'This payment has already been redeemed', ephemeral: true})
       }
