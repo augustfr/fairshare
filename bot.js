@@ -1090,7 +1090,7 @@ client.on('interactionCreate', async (interaction) => {
               interaction.editReply({content: 'There are no exchanges pairs with enough liquidity for this transfer', ephemeral: true})
             } else {
               const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
-              const amount = foreignAmountWithFee * bestRoute.rate
+              const amount = prettyDecimal(foreignAmountWithFee * bestRoute.rate)
               const fee = prettyDecimal((amount * (stats.fee / 100)))
               const amountWithFee = prettyDecimal((amount + fee))
               if (amountWithFee <= balance) {
@@ -1142,7 +1142,7 @@ client.on('interactionCreate', async (interaction) => {
                   } else {
                     const stats = await getServerStats(coupon[0].serverID)
                     const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
-                    const amount = coupon[0].amount / bestRoute.rate
+                    const amount = prettyDecimal(coupon[0].amount / bestRoute.rate)
                     const fee = prettyDecimal((amount * (stats.fee / 100)))
                     const redeemable = amount - fee
                     const redeemLog = await getRedeemLogByCoupon(coupon[0].coupon)
