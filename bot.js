@@ -191,6 +191,14 @@ async function getRemittance(remittanceID) {
   return data
 }
 
+async function getRemittanceByCoupon(coupon) {
+  const { data, error } = await supabase
+  .from('remittance')
+  .select()
+  .eq('coupon', coupon)
+  return data
+}
+
 async function couponExists(coupon) {
   const {data} = await supabase
   .from('remittance')
@@ -202,14 +210,6 @@ async function couponExists(coupon) {
   } else {
     return false;
   }
-}
-
-async function getCoupon(coupon) {
-  const { data, error } = await supabase
-  .from('remittance')
-  .select()
-  .eq('coupon', coupon)
-  return data
 }
 
 async function addRedeemLog(userID, coupon, amount, exID, originServerID, serverID) {
@@ -728,64 +728,64 @@ client.on('interactionCreate', async (interaction) => {
     const senderID = interaction.user.id
     const senderDisplayName = interaction.user.username
     if (interaction.commandName === 'redeem') {
-      const coupon = await getCoupon(interaction.options.getString('coupon'))
-      const foreignStats = await getServerStats(coupon[0].serverID)
-          if (await couponExists(interaction.options.getString('coupon'))) {
-            if (coupon[0].funded) {
-              if (await userExists(senderID, coupon[0].serverID)) {
-                const exchanges = await validExchangePairs(coupon[0].originServerID, coupon[0].serverID)
-                if (!exchanges) {
-                  interaction.editReply({content: 'There are no active exchange pairs for this transfer', ephemeral: true})
-                } else {
-                  let usableExchanges = []
-                  for (let i = 0; i < exchanges.length; i += 1) { 
-                    if ((coupon[0].amount / exchanges[i].rate) <= exchanges[i].foreignBalance) {
-                      usableExchanges.push(exchanges[i])
-                    }
-                  }
-                  if (usableExchanges.length === 0) {
-                    interaction.editReply({content: 'There are no exchanges pairs with enough liquidity for this transfer', ephemeral: true})
-                  } else {
-                    const stats = await getServerStats(coupon[0].serverID)
-                    const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
-                    const amount = prettyDecimal(coupon[0].amount / bestRoute.rate)
-                    const fee = prettyDecimal((amount * (stats.fee / 100)))
-                    const redeemable = amount - fee
-                    const redeemLog = await getRedeemLogByCoupon(coupon[0].coupon)
-                    let redeemID
-                    if (redeemLog.length > 0) {
-                      redeemID = redeemLog[0].id
-                    } else {
-                      redeemID = (await addRedeemLog(senderID, coupon[0].coupon, amount - fee, bestRoute.exID, coupon[0].originServerID, coupon[0].serverID))[0].id
-                    }
-                    const row = new ActionRowBuilder()
-                      .addComponents(
-                        new ButtonBuilder()
-                          .setCustomId('confirm_exchange')
-                          .setLabel('Confirm Transaction')
-                          .setStyle(ButtonStyle.Success))
-                      .addComponents(
-                        new ButtonBuilder()
-                          .setCustomId('decline_exchange')
-                          .setLabel('Decline Transaction')
-                          .setStyle(ButtonStyle.Danger));
-                    const embed = new EmbedBuilder()
-                      .setColor(0x0099FF)
-                      .setTitle('Redeem')
-                      .setDescription('With the best available route and after the ' + stats.fee + '% transaction fee is taken, you will be able to redeem ' + foreignStats.symbol + redeemable)
-                      .setFooter({ text: String(redeemID)});
-                    await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
+      const coupon = await getRemittanceByCoupon(interaction.options.getString('coupon'))
+        if (await couponExists(interaction.options.getString('coupon'))) {
+          const foreignStats = await getServerStats(coupon[0].serverID)
+          if (coupon[0].funded) {
+            if (await userExists(senderID, coupon[0].serverID)) {
+              const exchanges = await validExchangePairs(coupon[0].originServerID, coupon[0].serverID)
+              if (!exchanges) {
+                interaction.editReply({content: 'There are no active exchange pairs for this transfer', ephemeral: true})
+              } else {
+                let usableExchanges = []
+                for (let i = 0; i < exchanges.length; i += 1) { 
+                  if ((coupon[0].amount / exchanges[i].rate) <= exchanges[i].foreignBalance) {
+                    usableExchanges.push(exchanges[i])
                   }
                 }
-              } else {
-                interaction.editReply({content: 'You are not a member of the group that this currency is exchanging into', ephemeral: true})
+                if (usableExchanges.length === 0) {
+                  interaction.editReply({content: 'There are no exchanges pairs with enough liquidity for this transfer', ephemeral: true})
+                } else {
+                  const stats = await getServerStats(coupon[0].serverID)
+                  const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
+                  const amount = prettyDecimal(coupon[0].amount / bestRoute.rate)
+                  const fee = prettyDecimal((amount * (stats.fee / 100)))
+                  const redeemable = amount - fee
+                  const redeemLog = await getRedeemLogByCoupon(coupon[0].coupon)
+                  let redeemID
+                  if (redeemLog.length > 0) {
+                    redeemID = redeemLog[0].id
+                  } else {
+                    redeemID = (await addRedeemLog(senderID, coupon[0].coupon, amount - fee, bestRoute.exID, coupon[0].originServerID, coupon[0].serverID))[0].id
+                  }
+                  const row = new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('confirm_exchange')
+                        .setLabel('Confirm Transaction')
+                        .setStyle(ButtonStyle.Success))
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('decline_exchange')
+                        .setLabel('Decline Transaction')
+                        .setStyle(ButtonStyle.Danger));
+                  const embed = new EmbedBuilder()
+                    .setColor(0x0099FF)
+                    .setTitle('Redeem')
+                    .setDescription('With the best available route and after the ' + stats.fee + '% transaction fee is taken, you will be able to redeem ' + foreignStats.symbol + redeemable)
+                    .setFooter({ text: String(redeemID)});
+                  await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
+                }
               }
             } else {
-              interaction.editReply({content: 'This coupon has not been funded by the sender', ephemeral: true})
+              interaction.editReply({content: 'You are not a member of the group that this currency is exchanging into', ephemeral: true})
             }
           } else {
-            interaction.editReply({content: 'This coupon is either invalid or has expired', ephemeral: true})
+            interaction.editReply({content: 'This coupon has not been funded by the sender', ephemeral: true})
           }
+        } else {
+          interaction.editReply({content: 'This coupon is either invalid or has expired', ephemeral: true})
+        }
     }
     if (interaction.guildId == null) {
       console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' via DM")
@@ -1254,7 +1254,7 @@ client.on('interactionCreate', async (interaction) => {
                 while (true) {
                   coupon = generateUID()
                   if (await couponExists(coupon)) {
-                    if (!(await getCoupon(coupon))[0].redeemed)
+                    if (!(await getRemittanceByCoupon(coupon))[0].redeemed)
                       break
                   } else {
                     break
@@ -1287,7 +1287,7 @@ client.on('interactionCreate', async (interaction) => {
     if (remittance.length === 0) {
       interaction.editReply({content: "Your transfer has expired. Please use '/transfer' to initiate a new transfer", ephemeral: true})
     } else {
-      const coupon = await getCoupon(remittance[0].coupon)
+      const coupon = await getRemittanceByCoupon(remittance[0].coupon)
       if (!coupon[0].funded) {
         const stats = await getServerStats(interaction.guildId)
         const currentBalance = await getUserBalance(interaction.user.id, interaction.guildId)
@@ -1308,7 +1308,13 @@ client.on('interactionCreate', async (interaction) => {
           } 
         }
       } else {
-        interaction.editReply({content: 'Your payment coupon is: ' + remittance[0].coupon + ' and will expire in 5 minutes', ephemeral: true})
+        if (await couponExists(remittance[0].coupon) && !remittance[0].redeemed) {
+          interaction.editReply({content: 'Your payment coupon is: ' + remittance[0].coupon + ' and will expire 5 minutes from when it was first generated', ephemeral: true})
+        } else if (remittance[0].redeemed) {
+          interaction.editReply({content: 'Your payment has already been redeemed', ephemeral: true})
+        } else {
+          interaction.editReply({content: "Your payment coupon has expired. Create a new external payment with '/transfer'", ephemeral: true})
+        }
       }
     }
   } else if (interaction.customId === 'confirm_exchange') {
@@ -1316,7 +1322,7 @@ client.on('interactionCreate', async (interaction) => {
     if (await redeemLogExists(redeemID)) {
       const redeemLog = await getRedeemLog(redeemID)
       if (!redeemLog[0].redeemed) {
-        const coupon = await getCoupon(redeemLog[0].coupon)
+        const coupon = await getRemittanceByCoupon(redeemLog[0].coupon)
         const balance = roundUp(await getUserBalance(interaction.user.id, coupon[0].serverID))
         const exchange_a = await getExchangeByID(redeemLog[0].exchangeID)
         const exchange_b = await getExchangeByID(exchange_a[0].foreignExchangeID)
@@ -1353,7 +1359,7 @@ client.on('interactionCreate', async (interaction) => {
     const redeemLog = await getRedeemLog(redeemID)
     if (await redeemLogExists(redeemID)) {
       if (!redeemLog[0].redeemed) {
-        const coupon = await getCoupon(redeemLog[0].coupon)
+        const coupon = await getRemittanceByCoupon(redeemLog[0].coupon)
         deleteRedeemLog(coupon[0].coupon)
         interaction.editReply({content: 'The redemption has been declined', ephemeral: true})
       } else {
