@@ -1,7 +1,6 @@
 import { config } from 'dotenv';
 import { runPayments } from './dailyPayments.js'
 import { checkCoupons } from './couponChecker.js'
-import { deleteCoupon } from './couponChecker.js'
 import {
   Client,
   GatewayIntentBits,
@@ -35,9 +34,6 @@ import FundExchangeCommand from './commands/fundExchange.js';
 import ExchangesCommand from './commands/exchanges.js';
 import TransferCommand from './commands/transfer.js';
 import RedeemCommand from './commands/redeem.js';
-import fundExchange from './commands/fundExchange.js';
-import redeem from './commands/redeem.js';
-
 
 
 config();
@@ -1086,7 +1082,6 @@ client.on('interactionCreate', async (interaction) => {
               }
               sentExtMessage += '\n'
             }
-
             if (receivedExt.length > 0) {
               receivedExtMessage = 'External redemptions:\n'
               for (let i = 0; i < receivedExt.length; i += 1) {
@@ -1095,8 +1090,6 @@ client.on('interactionCreate', async (interaction) => {
               }
               receivedExtMessage += '\n'
             }
-
-
             interaction.editReply({content: sentMessage + receivedMessage + sentExtMessage + receivedExtMessage, ephemeral: true})
           }
         } else if (interaction.commandName === 'add_exchange') {
