@@ -619,11 +619,12 @@ async function getUserSentTransactions(userID, serverID, startDate, endDate) {
   const dates = data.map(a => a.date)
   const amounts = data.map(a => a.amount)
   const receiver = data.map(a => a.receiverID)
+  const messages = data.map(a => a.message)
   let result = []
   for (let i = 0; i < dates.length; i += 1) {
     const transactionDate = new Date(dates[i]).getTime()
     if ((startDate < transactionDate) && (transactionDate < endDate)) {
-      const transaction = {userID: receiver[i], amount: amounts[i]}
+      const transaction = {userID: receiver[i], amount: amounts[i], message: messages[i]}
       result.push(transaction)
     }
   }
@@ -640,11 +641,12 @@ async function getUserExternalTransfers(userID, originServerID, startDate, endDa
   const amounts = data.map(a => a.amount)
   const redemptions = data.map(a => a.redeemed)
   const receiverServerID = data.map(a => a.serverID)
+  const messages = data.map(a => a.message)
   let result = []
   for (let i = 0; i < dates.length; i += 1) {
     const transactionDate = new Date(dates[i]).getTime()
     if ((startDate < transactionDate) && (transactionDate < endDate) && redemptions[i]) {
-      const transaction = {receiverServerID: receiverServerID[i], amount: amounts[i]}
+      const transaction = {receiverServerID: receiverServerID[i], amount: amounts[i], message: messages[i]}
       result.push(transaction)
     }
   }
@@ -661,11 +663,12 @@ async function getUserExternalRedemptions(userID, serverID, startDate, endDate) 
   const amounts = data.map(a => a.amount)
   const originServerID = data.map(a => a.originServerID)
   const redemptions = data.map(a => a.redeemed)
+  const coupons = data.map(a => a.coupon)
   let result = []
   for (let i = 0; i < dates.length; i += 1) {
     const transactionDate = new Date(dates[i]).getTime()
     if ((startDate < transactionDate) && (transactionDate < endDate) && redemptions[i]) {
-      const transaction = {originServerID: originServerID[i], amount: amounts[i]}
+      const transaction = {originServerID: originServerID[i], amount: amounts[i], coupon: coupons[i]}
       result.push(transaction)
     }
   }
@@ -681,11 +684,12 @@ async function getUserReceivedTransactions(userID, serverID, startDate, endDate)
   const dates = data.map(a => a.date)
   const amounts = data.map(a => a.amount)
   const sender = data.map(a => a.senderID)
+  const messages = data.map(a => a.message)
   let result = []
   for (let i = 0; i < dates.length; i += 1) {
     const transactionDate = new Date(dates[i]).getTime()
     if ((startDate < transactionDate) && (transactionDate < endDate)) {
-      const transaction = {userID: sender[i], amount: amounts[i]}
+      const transaction = {userID: sender[i], amount: amounts[i], message: messages[i]}
       result.push(transaction)
     }
   }
@@ -825,12 +829,20 @@ client.on('interactionCreate', async (interaction) => {
               message += serverDisplayName + ':\n\n'
               sentMessage = 'Sent:\n'
               for (let i = 0; i < sent.length; i += 1) {
-                sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
+                if (sent[i].message !== null) {
+                  sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '> for ' + sent[i].message + '\n')
+                } else {
+                  sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
+                }
               }
               sentMessage += '\n'
-              receivedMessage = 'Received:\n'
+              let receivedMessage = 'Received:\n'
               for (let i = 0; i < received.length; i += 1) {
-                receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
+                if (received[i].message !== null) {
+                  receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '> for ' + received[i].message + '\n')
+                } else {
+                  receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
+                }
               }
               receivedMessage += '\n'
               if (sent.length === 0) {
@@ -845,7 +857,11 @@ client.on('interactionCreate', async (interaction) => {
                 sentExtMessage = 'External transfers:\n'
                 for (let i = 0; i < sentExt.length; i += 1) {
                   const serverDisplayName = (await client.guilds.fetch(sentExt[i].receiverServerID)).name
-                  sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + '\n')
+                  if (sentExt[i].message !== null) {
+                    sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + ' for ' + sentExt[i].message + '\n')
+                  } else {
+                    sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + '\n')
+                  }
                 }
                 sentExtMessage += '\n'
               }
@@ -853,7 +869,12 @@ client.on('interactionCreate', async (interaction) => {
                 receivedExtMessage = 'External redemptions:\n'
                 for (let i = 0; i < receivedExt.length; i += 1) {
                   const serverDisplayName = (await client.guilds.fetch(receivedExt[i].originServerID)).name
-                  receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + '\n')
+                  const remittance = await getRemittanceByCoupon(receivedExt[i].coupon)
+                  if (remittance[0].message !== null) {
+                    receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + ' for ' + remittance[0].message + '\n')
+                  } else {
+                    receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + '\n')
+                  }
                 }
                 receivedExtMessage += '\n'
               }
@@ -1118,12 +1139,20 @@ client.on('interactionCreate', async (interaction) => {
           } else {
             let sentMessage = 'Sent:\n'
             for (let i = 0; i < sent.length; i += 1) {
-              sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
+              if (sent[i].message !== null) {
+                sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '> for ' + sent[i].message + '\n')
+              } else {
+                sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
+              }
             }
             sentMessage += '\n'
             let receivedMessage = 'Received:\n'
             for (let i = 0; i < received.length; i += 1) {
-              receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
+              if (received[i].message !== null) {
+                receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '> for ' + received[i].message + '\n')
+              } else {
+                receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
+              }
             }
             receivedMessage += '\n'
             if (sent.length === 0) {
@@ -1138,7 +1167,11 @@ client.on('interactionCreate', async (interaction) => {
               sentExtMessage = 'External transfers:\n'
               for (let i = 0; i < sentExt.length; i += 1) {
                 const serverDisplayName = (await client.guilds.fetch(sentExt[i].receiverServerID)).name
-                sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + '\n')
+                if (sentExt[i].message !== null) {
+                  sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + ' for ' + sentExt[i].message + '\n')
+                } else {
+                  sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + '\n')
+                }
               }
               sentExtMessage += '\n'
             }
@@ -1146,7 +1179,12 @@ client.on('interactionCreate', async (interaction) => {
               receivedExtMessage = 'External redemptions:\n'
               for (let i = 0; i < receivedExt.length; i += 1) {
                 const serverDisplayName = (await client.guilds.fetch(receivedExt[i].originServerID)).name
-                receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + '\n')
+                const remittance = await getRemittanceByCoupon(receivedExt[i].coupon)
+                if (remittance[0].message !== null) {
+                  receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + ' for ' + remittance[0].message + '\n')
+                } else {
+                  receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + '\n')
+                }
               }
               receivedExtMessage += '\n'
             }
