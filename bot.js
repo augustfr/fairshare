@@ -37,6 +37,7 @@ import TransferCommand from './commands/transfer.js';
 import RedeemCommand from './commands/redeem.js';
 import WithdrawCommand from './commands/withdraw.js';
 import MyExchangeCommand from './commands/myExchange.js';
+import WithdrawFeesCommand from './commands/withdrawFees.js';
 
 
 config();
@@ -457,6 +458,20 @@ async function updateExchange(exID, amount, rate, totalFundsFromUser) {
   .eq('id', exID)
 }
 
+async function payExchange(exID, newTotal) {
+  const { error } = await supabase
+  .from('exchanges')
+  .update({feesEarned: newTotal})
+  .eq('id', exID)
+}
+
+async function updateExchangeFees(exID, newTotal) {
+  const { error } = await supabase
+  .from('exchanges')
+  .update({feesEarned: newTotal})
+  .eq('id', exID)
+}
+
 async function addForeignExchangeID(exID, foExID) {
   const { error } = await supabase
   .from('exchanges')
@@ -811,14 +826,19 @@ client.on('interactionCreate', async (interaction) => {
           message = 'You are a part of ' + globalUserStats.length + ' exchanges!\n\nDetails:\n\n'
         }
         for (let i = 0; i < globalUserStats.length; i += 1) {
-          const symbol = (await getServerStats(globalUserStats[i].serverID)).symbol
-          const userExchanges = await getExchanges(senderID, globalUserStats[i].serverID)
-          const serverDisplayName = (await client.guilds.fetch(globalUserStats[i].serverID)).name
-          message += serverDisplayName + ':\n'
-          for (let i = 0; i < userExchanges.length; i += 1) {
-            const foreignExchange = await getExchangeByID(userExchanges[i].foreignExchangeID)
-            const foreignExchangeDisplayName =  (await client.guilds.fetch(foreignExchange[0].serverID)).name
-            message += 'Exchange ID: ' + userExchanges[i].id + '\nTotal Balance: ' + symbol + userExchanges[i].balance + '\nFunding from you: ' + symbol + userExchanges[i].fundsFromUser + '\nExchanges with: ' + foreignExchangeDisplayName + '\nRate: ' + userExchanges[i].rate + '\n\n'
+          const serverStats = await getServerStats(globalUserStats[i].serverID)
+          if (serverStats !== null) {
+            const symbol = serverStats.symbol
+            const userExchanges = await getExchanges(senderID, globalUserStats[i].serverID)
+            const serverDisplayName = (await client.guilds.fetch(globalUserStats[i].serverID)).name
+            message += serverDisplayName + ':\n'
+            for (let i = 0; i < userExchanges.length; i += 1) {
+              const foreignExchange = await getExchangeByID(userExchanges[i].foreignExchangeID)
+              const foreignExchangeDisplayName =  (await client.guilds.fetch(foreignExchange[0].serverID)).name
+              message += 'Exchange ID: ' + userExchanges[i].id + '\nTotal Balance: ' + symbol + prettyDecimal(userExchanges[i].balance) + '\nFunding from you: ' + symbol + prettyDecimal(userExchanges[i].fundsFromUser) + '\nFees earned: ' + symbol + prettyDecimal(userExchanges[i].feesEarned) +  '\nExchanges with: ' + foreignExchangeDisplayName + '\nRate: ' + userExchanges[i].rate + '\n\n'
+            }
+          } else {
+            message += 'Deleted server\n\n'
           }
         }
         interaction.editReply({content: message, ephemeral: true})
@@ -836,11 +856,36 @@ client.on('interactionCreate', async (interaction) => {
             const currentUserBalance = await getUserBalance(senderID, userExchanges[0].serverID)
             const exchangeSymbol = (await getServerStats(userExchanges[0].serverID)).symbol
             if ((fundedByUser >= amount) && (currentExchangeBalance >= amount)) {
-              updateBalance(senderID, globalUserStats[0].serverID, currentUserBalance + amount)
+              updateBalance(senderID, userExchanges[0].serverID, currentUserBalance + amount)
               updateExchange(userExchanges[0].id, currentExchangeBalance - amount, userExchanges[0].rate, fundedByUser - amount)
-              interaction.editReply({content: exchangeSymbol + amount + ' has been successfully withdrawn. The balance of this exchange is now ' + exchangeSymbol + (currentExchangeBalance - amount) + ' with ' + exchangeSymbol + (fundedByUser - amount) + ' provided by you', ephemeral: true})
+              interaction.editReply({content: exchangeSymbol + prettyDecimal(amount) + ' has been successfully withdrawn. The balance of this exchange is now ' + exchangeSymbol + prettyDecimal(currentExchangeBalance - amount) + ' with ' + exchangeSymbol + prettyDecimal(fundedByUser - amount) + ' provided by you', ephemeral: true})
             } else {
-              interaction.editReply({content: 'The balance of this exchange is ' + exchangeSymbol + currentExchangeBalance + ' with ' + exchangeSymbol + fundedByUser + ' provided by you.\n\nUnable to withdraw', ephemeral: true})
+              interaction.editReply({content: 'The balance of this exchange is ' + exchangeSymbol + prettyDecimal(currentExchangeBalance) + ' with ' + exchangeSymbol + prettyDecimal(fundedByUser) + ' provided by you.\n\nUnable to withdraw', ephemeral: true})
+            }
+          } else {
+            interaction.editReply({content: 'You are not a part of this exchange', ephemeral: true})
+          }
+        } else {
+          interaction.editReply({content: 'Invalid exchange ID', ephemeral: true})
+        }
+      }
+    } else if (interaction.commandName === 'withdraw_fees') {
+      if (globalUserStats.length === 0) {
+        interaction.editReply({content: 'You are not a member of any groups', ephemeral: true})
+      } else {
+        const userExchanges = await getExchangeByID(interaction.options.getInteger('exchange_id'))
+        if (userExchanges.length > 0) {
+          if (userExchanges[0].userID === senderID) {
+            const currentExchangeFeeBalance = prettyDecimal(userExchanges[0].feesEarned)
+            const amount = interaction.options.getNumber('amount')
+            const currentUserBalance = await getUserBalance(senderID, userExchanges[0].serverID)
+            const exchangeSymbol = (await getServerStats(userExchanges[0].serverID)).symbol
+            if (currentExchangeFeeBalance >= amount) {
+              updateBalance(senderID, userExchanges[0].serverID, currentUserBalance + amount)
+              updateExchangeFees(userExchanges[0].id, currentExchangeFeeBalance - amount)
+              interaction.editReply({content: exchangeSymbol + amount + ' has been successfully withdrawn. The balance of fees earned in this exchange is now ' + exchangeSymbol + (currentExchangeFeeBalance - amount), ephemeral: true})
+            } else {
+              interaction.editReply({content: 'The fee balance of this exchange is ' + exchangeSymbol + currentExchangeFeeBalance + '\n\nUnable to withdraw', ephemeral: true})
             }
           } else {
             interaction.editReply({content: 'You are not a part of this exchange', ephemeral: true})
@@ -863,9 +908,14 @@ client.on('interactionCreate', async (interaction) => {
                 message = 'You are a member of ' + globalUserStats.length + ' groups!\n\nYour balances are:\n\n'
               }
               for (let i = 0; i < globalUserStats.length; i += 1) {
-                const symbol = (await getServerStats(globalUserStats[i].serverID)).symbol
-                const serverDisplayName = (await client.guilds.fetch(globalUserStats[i].serverID)).name
-                message += (symbol + globalUserStats[i].balance + ' in ' + serverDisplayName + '\n')
+                const serverStats = await getServerStats(globalUserStats[i].serverID)
+                if (serverStats !== null) {
+                  const symbol = serverStats.symbol
+                  const serverDisplayName = (await client.guilds.fetch(globalUserStats[i].serverID)).name
+                  message += (symbol + globalUserStats[i].balance + ' in ' + serverDisplayName + '\n')
+                } else {
+                  message += ('Deleted server\n')
+                }
               }
               interaction.editReply({content: message, ephemeral: true})
           } else if (interaction.commandName === 'recent') {
@@ -876,71 +926,76 @@ client.on('interactionCreate', async (interaction) => {
             let receivedMessage = ''
             let receivedExtMessage = ''
             for (let i = 0; i < globalUserStats.length; i += 1) {
-              const symbol = (await getServerStats(globalUserStats[i].serverID)).symbol
-              const serverDisplayName = (await client.guilds.fetch(globalUserStats[i].serverID)).name
-              const serverID = (await client.guilds.fetch(globalUserStats[i].serverID)).id
-              const sent = await getUserSentTransactions(senderID, serverID, currentDate - 604800000, currentDate)
-              const sentExt = await getUserExternalTransfers(senderID, serverID, currentDate - 604800000, currentDate)
-              const received = await getUserReceivedTransactions(senderID, serverID, currentDate - 604800000, currentDate)
-              const receivedExt = await getUserExternalRedemptions(senderID, serverID, currentDate - 604800000, currentDate)
-              message += serverDisplayName + ':\n\n'
-              sentMessage = 'Sent:\n'
-              for (let i = 0; i < sent.length; i += 1) {
-                if (sent[i].message !== null) {
-                  sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '> for ' + sent[i].message + '\n')
-                } else {
-                  sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
-                }
-              }
-              sentMessage += '\n'
-              receivedMessage = 'Received:\n'
-              for (let i = 0; i < received.length; i += 1) {
-                if (received[i].message !== null) {
-                  receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '> for ' + received[i].message + '\n')
-                } else {
-                  receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
-                }
-              }
-              receivedMessage += '\n'
-              if (sent.length === 0) {
-                sentMessage = ''
-              }
-              if (received.length === 0) {
-                receivedMessage = ''
-              }
-              sentExtMessage = ''
-              receivedExtMessage = ''
-              if (sentExt.length > 0) {
-                sentExtMessage = 'External transfers:\n'
-                for (let i = 0; i < sentExt.length; i += 1) {
-                  const serverDisplayName = (await client.guilds.fetch(sentExt[i].receiverServerID)).name
-                  if (sentExt[i].message !== null) {
-                    sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + ' for ' + sentExt[i].message + '\n')
+              const serverStats = await getServerStats(globalUserStats[i].serverID)
+              if (serverStats !== null) {
+                const symbol = serverStats.symbol
+                const serverDisplayName = (await client.guilds.fetch(globalUserStats[i].serverID)).name
+                const serverID = (await client.guilds.fetch(globalUserStats[i].serverID)).id
+                const sent = await getUserSentTransactions(senderID, serverID, currentDate - 604800000, currentDate)
+                const sentExt = await getUserExternalTransfers(senderID, serverID, currentDate - 604800000, currentDate)
+                const received = await getUserReceivedTransactions(senderID, serverID, currentDate - 604800000, currentDate)
+                const receivedExt = await getUserExternalRedemptions(senderID, serverID, currentDate - 604800000, currentDate)
+                message += serverDisplayName + ':\n\n'
+                sentMessage = 'Sent:\n'
+                for (let i = 0; i < sent.length; i += 1) {
+                  if (sent[i].message !== null) {
+                    sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '> for ' + sent[i].message + '\n')
                   } else {
-                    sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + '\n')
+                    sentMessage += (symbol + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
                   }
                 }
-                sentExtMessage += '\n'
-              }
-              if (receivedExt.length > 0) {
-                receivedExtMessage = 'External redemptions:\n'
-                for (let i = 0; i < receivedExt.length; i += 1) {
-                  const serverDisplayName = (await client.guilds.fetch(receivedExt[i].originServerID)).name
-                  const remittance = await getRemittanceByCoupon(receivedExt[i].coupon)
-                  if (remittance[0].message !== null) {
-                    receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + ' for ' + remittance[0].message + '\n')
+                sentMessage += '\n'
+                receivedMessage = 'Received:\n'
+                for (let i = 0; i < received.length; i += 1) {
+                  if (received[i].message !== null) {
+                    receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '> for ' + received[i].message + '\n')
                   } else {
-                    receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + '\n')
+                    receivedMessage += (symbol + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
                   }
                 }
-                receivedExtMessage += '\n'
+                receivedMessage += '\n'
+                if (sent.length === 0) {
+                  sentMessage = ''
+                }
+                if (received.length === 0) {
+                  receivedMessage = ''
+                }
+                sentExtMessage = ''
+                receivedExtMessage = ''
+                if (sentExt.length > 0) {
+                  sentExtMessage = 'External transfers:\n'
+                  for (let i = 0; i < sentExt.length; i += 1) {
+                    const serverDisplayName = (await client.guilds.fetch(sentExt[i].receiverServerID)).name
+                    if (sentExt[i].message !== null) {
+                      sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + ' for ' + sentExt[i].message + '\n')
+                    } else {
+                      sentExtMessage += (symbol + sentExt[i].amount + ' to ' + serverDisplayName + '\n')
+                    }
+                  }
+                  sentExtMessage += '\n'
+                }
+                if (receivedExt.length > 0) {
+                  receivedExtMessage = 'External redemptions:\n'
+                  for (let i = 0; i < receivedExt.length; i += 1) {
+                    const serverDisplayName = (await client.guilds.fetch(receivedExt[i].originServerID)).name
+                    const remittance = await getRemittanceByCoupon(receivedExt[i].coupon)
+                    if (remittance[0].message !== null) {
+                      receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + ' for ' + remittance[0].message + '\n')
+                    } else {
+                      receivedExtMessage += (symbol + receivedExt[i].amount + ' from ' + serverDisplayName + '\n')
+                    }
+                  }
+                  receivedExtMessage += '\n'
+                }
+                message += sentMessage + receivedMessage + sentExtMessage + receivedExtMessage
+              } else {
+                message += 'Deleted server\n\n'
               }
-              message += sentMessage + receivedMessage + sentExtMessage + receivedExtMessage
             }
             interaction.editReply({content: message, ephemeral: true})
           }
         }
-    } else if (interaction.commandName !== 'redeem' && interaction.commandName !== 'my_exchanges' && interaction.commandName !== 'withdraw') {
+    } else if (interaction.commandName !== 'redeem' && interaction.commandName !== 'my_exchanges' && interaction.commandName !== 'withdraw' && interaction.commandName !== 'withdraw_fees') {
         interaction.editReply({content: "Only the '/balance', '/recent', '/redeem', and '/withdraw' commands work in DMs. Please go to your individual group to use the other commands.", ephemeral: true})
       }
     } else {
@@ -1377,7 +1432,6 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.customId === 'coupon') {
     const remittanceID = parseInt(interaction.message.embeds[0].data.footer.text)
     const remittance = await getRemittance(remittanceID)
-    console.log(remittance)
     if (remittance.length === 0) {
       interaction.editReply({content: "Your transfer has expired. Please use '/transfer' to initiate a new transfer", ephemeral: true})
     } else {
@@ -1428,6 +1482,7 @@ client.on('interactionCreate', async (interaction) => {
         updateBalance(interaction.user.id, coupon[0].serverID, balance + amount)
         updateExchange(exchange_a[0].id, exchange_a[0].balance - (amount / fee), exchange_a[0].rate)
         updateExchange(exchange_b[0].id, exchange_b[0].balance + coupon[0].amount, exchange_b[0].rate)
+        payExchange(exchange_a[0].id, (exchange_a[0].feesEarned + coupon[0].fee))
         couponRedeemed(coupon[0].coupon)
         redeemed(redeemID)
         interaction.editReply({content: 'Your redemption was successful. Your current balance in ' + serverDisplayName + ' is: ' + stats.symbol + (balance + redeemLog[0].amount), ephemeral: true})
@@ -1462,7 +1517,6 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 }
-
 });
 
 export async function main() {
@@ -1489,7 +1543,8 @@ export async function main() {
     TransferCommand,
     RedeemCommand,
     WithdrawCommand,
-    MyExchangeCommand
+    MyExchangeCommand,
+    WithdrawFeesCommand
   ];
 
     try {
