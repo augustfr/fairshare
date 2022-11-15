@@ -731,8 +731,15 @@ client.on('ready', () => console.log(`${client.user.tag} has logged in!`));
 client.on('interactionCreate', async (interaction) => {
   await interaction.deferReply({ephemeral: true});
   if (interaction.isChatInputCommand()) {
-    const senderID = interaction.user.id
     const senderDisplayName = interaction.user.username
+    const senderID = interaction.user.id
+    if (interaction.guildId == null) {
+      console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' via DM")
+    } else {
+      const serverID = interaction.guildId
+      const serverDisplayName = interaction.guild.name
+      console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' in " + serverDisplayName + ' (' + serverID + ')')
+    }
     const globalUserStats = await getUserGlobalStats(senderID)
     if (interaction.commandName === 'redeem') {
       const coupon = await getRemittanceByCoupon(interaction.options.getString('coupon'))
@@ -816,9 +823,34 @@ client.on('interactionCreate', async (interaction) => {
         }
         interaction.editReply({content: message, ephemeral: true})
       }
+    } else if (interaction.commandName === 'withdraw') {
+      if (globalUserStats.length === 0) {
+        interaction.editReply({content: 'You are not a member of any groups', ephemeral: true})
+      } else {
+        const userExchanges = await getExchangeByID(interaction.options.getInteger('exchange_id'))
+        if (userExchanges.length > 0) {
+          if (userExchanges[0].userID === senderID) {
+            const currentExchangeBalance = prettyDecimal(userExchanges[0].balance)
+            const fundedByUser = prettyDecimal(userExchanges[0].fundsFromUser)
+            const amount = interaction.options.getNumber('amount')
+            const currentUserBalance = await getUserBalance(senderID, userExchanges[0].serverID)
+            const exchangeSymbol = (await getServerStats(userExchanges[0].serverID)).symbol
+            if ((fundedByUser >= amount) && (currentExchangeBalance >= amount)) {
+              updateBalance(senderID, globalUserStats[0].serverID, currentUserBalance + amount)
+              updateExchange(userExchanges[0].id, currentExchangeBalance - amount, userExchanges[0].rate, fundedByUser - amount)
+              interaction.editReply({content: exchangeSymbol + amount + ' has been successfully withdrawn. The balance of this exchange is now ' + exchangeSymbol + (currentExchangeBalance - amount) + ' with ' + exchangeSymbol + (fundedByUser - amount) + ' provided by you', ephemeral: true})
+            } else {
+              interaction.editReply({content: 'The balance of this exchange is ' + exchangeSymbol + currentExchangeBalance + ' with ' + exchangeSymbol + fundedByUser + ' provided by you.\n\nUnable to withdraw', ephemeral: true})
+            }
+          } else {
+            interaction.editReply({content: 'You are not a part of this exchange', ephemeral: true})
+          }
+        } else {
+          interaction.editReply({content: 'Invalid exchange ID', ephemeral: true})
+        }
+      }
     }
     if (interaction.guildId == null) {
-      console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' via DM")
       if (interaction.commandName === 'balance' || interaction.commandName === 'recent') {
         if (globalUserStats.length === 0) {
           interaction.editReply({content: "You are not in any groups. Go to a group's server and use '/join'", ephemeral: true})
@@ -908,14 +940,12 @@ client.on('interactionCreate', async (interaction) => {
             interaction.editReply({content: message, ephemeral: true})
           }
         }
-    } else if (interaction.commandName !== 'redeem' && interaction.commandName !== 'my_exchanges') {
-        interaction.editReply({content: "Only the '/balance', '/recent', and '/redeem' commands work in DMs. Please go to your individual group to use the other commands.", ephemeral: true})
+    } else if (interaction.commandName !== 'redeem' && interaction.commandName !== 'my_exchanges' && interaction.commandName !== 'withdraw') {
+        interaction.editReply({content: "Only the '/balance', '/recent', '/redeem', and '/withdraw' commands work in DMs. Please go to your individual group to use the other commands.", ephemeral: true})
       }
     } else {
-      const serverDisplayName = interaction.guild.name
       const serverID = interaction.guildId
       const stats = await getServerStats(serverID)
-      console.log(senderDisplayName + ' (' + senderID + ") ran '/" + interaction.commandName + "' in " + serverDisplayName + ' (' + serverID + ')')
       if (interaction.commandName === 'setup') {
         if (stats === null) {
           interaction.editReply({content: 'This server is not authorized to create a group', ephemeral: true})
@@ -1261,28 +1291,6 @@ client.on('interactionCreate', async (interaction) => {
           } else {
             interaction.editReply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
           }
-        } else if (interaction.commandName === 'withdraw') {
-          const userExchanges = await getExchanges(senderID, serverID)
-          if (userExchanges.length > 0) {
-            for (let i = 0; i < userExchanges.length; i += 1) {
-              if ((userExchanges[i].serverID == serverID) && userExchanges[i].userID == interaction.options.getString('user')) {
-                const currentExchangeBalance = prettyDecimal(userExchanges[i].balance)
-                const fundedByUser = prettyDecimal(userExchanges[i].fundsFromUser)
-                const amount = interaction.options.getNumber('amount')
-                const currentUserBalance = await getUserBalance(senderID, serverID)
-                if ((fundedByUser >= amount) && (currentExchangeBalance >= amount)) {
-                  updateBalance(senderID, serverID, currentUserBalance + amount)
-                  updateExchange(userExchanges[i].id, currentExchangeBalance - amount, userExchanges[i].rate, fundedByUser - amount)
-                  interaction.editReply({content: symbol + amount + ' has been successfully withdrawn. The balance of this exchange is now ' + symbol + (currentExchangeBalance - amount) + ' with ' + symbol + (fundedByUser - amount) + ' provided by you', ephemeral: true})
-                } else {
-                  interaction.editReply({content: 'The balance of this exchange is ' + symbol + currentExchangeBalance + ' with ' + symbol + fundedByUser + ' provided by you.\n\nUnable to withdraw', ephemeral: true})
-                }
-              } else 
-              interaction.editReply({content: 'Exchange pair not valid', ephemeral: true})
-            }
-          } else {
-            interaction.editReply({content: "There are no exchange pairs for you to withdraw from. Create your own exchange with another user by using '/add_exchange'", ephemeral: true})
-          }
         } else if (interaction.commandName === 'exchanges') {
           const serverExchanges = await getExchangesByServer(serverID)
           let message = ''
@@ -1369,6 +1377,7 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.customId === 'coupon') {
     const remittanceID = parseInt(interaction.message.embeds[0].data.footer.text)
     const remittance = await getRemittance(remittanceID)
+    console.log(remittance)
     if (remittance.length === 0) {
       interaction.editReply({content: "Your transfer has expired. Please use '/transfer' to initiate a new transfer", ephemeral: true})
     } else {
