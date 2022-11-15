@@ -1034,6 +1034,7 @@ client.on('interactionCreate', async (interaction) => {
         }
       } else if (stats.symbol !== null) {
         const symbol = stats.symbol
+        const serverDisplayName = interaction.guild.name
         if (interaction.commandName === 'join') {
           if (await userExists(senderID, serverID)) {
             interaction.editReply({content: 'You are already in this group', ephemeral: true})
@@ -1041,6 +1042,9 @@ client.on('interactionCreate', async (interaction) => {
               requestToJoin(senderID, serverID)
               interaction.editReply({content: 'You have successfully requested to join the ' + serverDisplayName + ' group!', ephemeral: true})
               interaction.member.send('You have successfully requested to join the ' + serverDisplayName + ' group!').catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you if you are accepted!', ephemeral: true})});
+              if (stats.feedChannel !== null && stats.feedChannel !== '') {
+                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> has requested to join the group! Use '/endorse' if you'd like to give them an endorsement!")
+              }
           }
         } else if (await userExists(senderID, serverID)) {
           if (interaction.commandName === 'balance') {
@@ -1068,7 +1072,9 @@ client.on('interactionCreate', async (interaction) => {
                   await clearEndorsements(receiverID, serverID)
                   clearRequest(receiverID, serverID)
                   interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
-                  interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the ' + serverDisplayName + ' group!')
+                  if (stats.feedChannel !== null && stats.feedChannel !== '') {
+                    interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the group!')
+                  }
                 } 
             }
           } else {
