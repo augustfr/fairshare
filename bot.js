@@ -894,6 +894,33 @@ client.on('interactionCreate', async (interaction) => {
           interaction.editReply({content: 'Invalid exchange ID', ephemeral: true})
         }
       }
+    } else if (interaction.commandName === 'fund_exchange') {
+      const exchange = await getExchangeByID(interaction.options.getInteger('exchange_id'))
+      const amount = prettyDecimal(interaction.options.getNumber('amount'))
+        if (exchange.length > 0) {
+          if (exchange[0].userID === senderID) {
+            if (await userExists(senderID, exchange[0].serverID)) {
+              const balance = prettyDecimal(await getUserBalance(senderID, exchange[0].serverID))
+              if (amount <= balance) {
+                const currentExchangeBalance = exchange[0].balance
+                const fundsFromUser = exchange[0].fundsFromUser + amount
+                if (interaction.options.getNumber('rate') !== null) {
+                  updateExchange(exchange[0].id, currentExchangeBalance + amount, interaction.options.getNumber('rate'), fundsFromUser)
+                } else {
+                  updateExchange(exchange[0].id, currentExchangeBalance + amount, exchange[0].rate, fundsFromUser)
+                }
+                updateBalance(senderID, exchange[0].serverID, balance - amount)
+                interaction.editReply({content: "Your exchange has been successfully updated!", ephemeral: true})
+              } else {
+                interaction.editReply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
+              }
+            } else {
+              interaction.editReply({content: "You are not a member of the group being exchanged into!", ephemeral: true})
+            }
+          }
+      } else {
+        interaction.editReply({content: "This exchange does not exist. Use '/my_exchanges' to view your exchanges", ephemeral: true})
+      }
     }
     if (interaction.guildId == null) {
       if (interaction.commandName === 'balance' || interaction.commandName === 'recent') {
@@ -995,8 +1022,8 @@ client.on('interactionCreate', async (interaction) => {
             interaction.editReply({content: message, ephemeral: true})
           }
         }
-    } else if (interaction.commandName !== 'redeem' && interaction.commandName !== 'my_exchanges' && interaction.commandName !== 'withdraw' && interaction.commandName !== 'withdraw_fees') {
-        interaction.editReply({content: "Only the '/balance', '/recent', '/redeem', and '/withdraw' commands work in DMs. Please go to your individual group to use the other commands.", ephemeral: true})
+    } else if (interaction.commandName !== 'redeem' && interaction.commandName !== 'my_exchanges' && interaction.commandName !== 'withdraw' && interaction.commandName !== 'withdraw_fees' && interaction.commandName !== 'fund_exchange') {
+        interaction.editReply({content: "Only the '/balance', '/recent', '/redeem', '/withdraw', '/withdraw_fees', '/my_exchanges', and '/fund_exchange commands work in DMs. Please go to your individual group to use the other commands.", ephemeral: true})
       }
     } else {
       const serverID = interaction.guildId
@@ -1326,29 +1353,6 @@ client.on('interactionCreate', async (interaction) => {
             addForeignExchangeID(newExPair[1].id, newExPair[0].id)
             updateBalance(senderID, serverID, balance - amount)
             interaction.editReply({content: "Your exchange has been added! The user you set will need to fund their side by using '/fund_exchange'", ephemeral: true})
-          } else {
-            interaction.editReply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
-          }
-        } else if (interaction.commandName === 'fund_exchange') {
-          const userExchanges = await getExchanges(senderID, serverID)
-          const balance = prettyDecimal(await getUserBalance(senderID, serverID))
-          const amount = prettyDecimal(interaction.options.getNumber('amount'))
-          if (amount <= balance) {
-            if (userExchanges.length > 0) {
-              for (let i = 0; i < userExchanges.length; i += 1) {
-                const foExID = (await getExchangeByID(userExchanges[i].id))[0].foreignExchangeID
-                const pairing = await getExchangeByID(foExID)
-                if ((userExchanges[i].serverID == serverID) && (pairing[0].serverID == interaction.options.getString('server')) && (pairing[0].userID == interaction.options.getString('user'))) {
-                  const currentExchangeBalance = userExchanges[i].balance
-                  const fundsFromUser = userExchanges[i].fundsFromUser + amount
-                  updateExchange(userExchanges[i].id, currentExchangeBalance + amount, interaction.options.getNumber('rate'), fundsFromUser)
-                  updateBalance(senderID, serverID, balance - amount)
-                  interaction.editReply({content: "Your exchange pairing has been successfully updated!", ephemeral: true})
-                }
-              }
-            } else {
-              interaction.editReply({content: "There are no exchange pairs for you to fund. Create your own exchange with another user by using '/add_exchange'", ephemeral: true})
-            }
           } else {
             interaction.editReply({content: 'You currently have ' + symbol + balance + ', but ' + symbol + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
           }
