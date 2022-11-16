@@ -1371,7 +1371,7 @@ client.on('interactionCreate', async (interaction) => {
             const foExID = (await getExchangeByID(serverExchanges[i].id))[0].foreignExchangeID
             const pairing = await getExchangeByID(foExID)
             const foreignSymbol = (await getServerStats(pairing[0].serverID)).symbol
-            message += '<@' + serverExchanges[i].userID + '> created an exchange for ' + (await client.guilds.fetch(pairing[0].serverID)).name + ' (' + foreignSymbol + ')' + ' which has a current balance of ' + symbol + prettyDecimal(serverExchanges[i].balance) + ' and a rate of ' + serverExchanges[i].rate + '\n'
+            message += '<@' + serverExchanges[i].userID + '> created an exchange for ' + (await client.guilds.fetch(pairing[0].serverID)).name + ' (' + foreignSymbol + ')' + ' which has a current balance of ' + foreignSymbol + prettyDecimal(pairing[i].balance) + ' and a rate of ' + serverExchanges[i].rate + '\n'
           }
           interaction.editReply({content: message, ephemeral: true})
         } else if (interaction.commandName === 'transfer') {
