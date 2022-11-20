@@ -1156,7 +1156,7 @@ client.on('interactionCreate', async (interaction) => {
                   interaction.editReply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + symbol + interaction.options.getNumber('income') + ' daily income has been updated!', ephemeral: true})
                 } else {
                   if ((votes[0].length + 1) > (superMajority * numUsers)) {
-                    acceptVotes(serverID, votes[0].fee, votes[0].income)
+                    acceptVotes(serverID, prettyDecimal(votes[0].fee), prettyDecimal(votes[0].income))
                     clearVotes(serverID)
                     interaction.editReply({content: 'Your vote has reached a super majority and the votes have been accepted!\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' +  symbol + votes[0].income + ' daily income', ephemeral: true})
                   } else {
