@@ -31,11 +31,10 @@ const client = new Client({
   ],
 });
 
-async function updatePayout(serverID) {
-  const currentDate = new Date();
+async function updatePayout(serverID, newDate) {
   const { error } = await supabase
   .from('serverStats')
-  .update({latestPayout: currentDate})
+  .update({latestPayout: newDate})
   .eq('serverID', serverID)
 }
 
@@ -80,7 +79,8 @@ export async function runPayments() {
             const newAmount = (await getUserBalance(users[index], stats.serverID)) + stats.income
             await updateBalance(users[index], stats.serverID, newAmount)
           } 
-          await updatePayout(stats.serverID)
+          const newPayoutDate = new Date(new Date(details[1]).getTime() + 86400000)
+          await updatePayout(stats.serverID, newPayoutDate)
           console.log('Sent payouts to ' + stats.serverID)
           if (stats.feedChannel !== null && stats.feedChannel !== '') {
             try {
@@ -92,7 +92,8 @@ export async function runPayments() {
         }
       }
     }
-    await sleep(1800000)
+    await sleep(1000)
+    //await sleep(3600000)
   }
 
 }
