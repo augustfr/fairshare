@@ -92,8 +92,7 @@ export async function runPayments() {
         }
       }
     }
-    await sleep(1000)
-    //await sleep(3600000)
+    await sleep(3600000)
   }
 
 }
