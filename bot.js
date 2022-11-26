@@ -883,7 +883,7 @@ client.on('interactionCreate', async (interaction) => {
             if (currentExchangeFeeBalance >= amount) {
               updateBalance(senderID, userExchanges[0].serverID, currentUserBalance + amount)
               updateExchangeFees(userExchanges[0].id, currentExchangeFeeBalance - amount)
-              interaction.editReply({content: exchangeSymbol + amount + ' has been successfully withdrawn. The balance of fees earned in this exchange is now ' + exchangeSymbol + (currentExchangeFeeBalance - amount), ephemeral: true})
+              interaction.editReply({content: exchangeSymbol + amount + ' has been successfully withdrawn. The balance of fees earned in this exchange is now ' + exchangeSymbol + prettyDecimal(currentExchangeFeeBalance - amount), ephemeral: true})
             } else {
               interaction.editReply({content: 'The fee balance of this exchange is ' + exchangeSymbol + currentExchangeFeeBalance + '\n\nUnable to withdraw', ephemeral: true})
             }
