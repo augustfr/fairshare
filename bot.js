@@ -618,13 +618,15 @@ async function getVolume(serverID, startDate, endDate) {
   const dates = data.map(a => a.date)
   const amounts = data.map(a => a.amount)
   let volume = 0
+  let count = 0
   for (let i = 0; i < dates.length; i += 1) {
     const transactionDate = new Date(dates[i]).getTime()
     if ((startDate < transactionDate) && (transactionDate < endDate)) {
       volume += amounts[i]
+      count++
     }
   }
-  return {volume: volume, numTransactions: amounts.length}
+  return {volume: volume, numTransactions: count}
 }
 
 async function getUserSentTransactions(userID, serverID, startDate, endDate) {
