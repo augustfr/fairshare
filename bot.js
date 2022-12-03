@@ -1036,23 +1036,26 @@ client.on('interactionCreate', async (interaction) => {
         if (interaction.member.roles.cache.has(stats.adminRoleID)) {
           if (stats.symbol === null || stats.symbol === '') {
             try {
-              if (interaction.member.roles.cache.has(interaction.options.getRole('general_role').id)) {
-                await interaction.member.roles.add(interaction.options.getRole('general_role'))
-              } else {
-                await interaction.member.roles.add(interaction.options.getRole('general_role'))
-                await interaction.member.roles.remove(interaction.options.getRole('general_role'))
-              }
+              await interaction.member.roles.add(interaction.options.getRole('general_role'))
             } catch (error) {
               interaction.editReply({content: 'Please make sure the bot role is above the general role you just set (it currently is not).\n\nTo do this, go to Server Settings --> Roles and then drag the role for this bot to be above the <@&' + interaction.options.getRole('general_role') + '> role.\n\nOnce fixed, come back and run the setup command again.' , ephemeral: true});
               return
             } 
-            initUser(senderID, serverID, interaction.options.getNumber('income'))
-            if (interaction.options.getChannel('feed_channel') !== null) {
-              setServerStats(serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'), interaction.options.getRole('general_role'),  interaction.options.getString('symbol'), interaction.options.getChannel('feed_channel'))
-            } else {
-              setServerStats(serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'), interaction.options.getRole('general_role'),  interaction.options.getString('symbol'), null)
+            let income = interaction.options.getChannel('income')
+            let fee = interaction.options.getChannel('fee')
+            if (income === null) {
+              income = 50
             }
-              interaction.editReply({content: 'Server settings have been set!', ephemeral: true})
+            if (fee === null) {
+              fee = 8
+            }
+            initUser(senderID, serverID, income)
+            if (interaction.options.getChannel('feed_channel') !== null) {
+              setServerStats(serverID, fee, income, interaction.options.getRole('general_role'),  interaction.options.getString('symbol'), interaction.options.getChannel('feed_channel'))
+            } else {
+              setServerStats(serverID, fee, income, interaction.options.getRole('general_role'),  interaction.options.getString('symbol'), null)
+            }
+              interaction.editReply({content: 'Server settings have been set and you are the first member of the group!', ephemeral: true})
           } else {
             interaction.editReply({content: "Server has already been setup. Trying using '/update' instead", ephemeral: true})
           }
