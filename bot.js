@@ -1110,7 +1110,7 @@ client.on('interactionCreate', async (interaction) => {
         } else if (await userExists(senderID, serverID)) {
           if (interaction.commandName === 'balance') {
             const balance = await getUserBalance(senderID, serverID)
-            interaction.editReply({content: 'Your current balance: ' + name + balance, ephemeral: true})
+            interaction.editReply({content: 'Your current balance: ' + balance + ' ' + name + ' shares', ephemeral: true})
           } else if (interaction.commandName === 'endorse') {
             const receiverID = interaction.options.getUser('user').id
             if (await hasRequested(receiverID, serverID)) {
