@@ -8,8 +8,8 @@ const setupCommand = new SlashCommandBuilder()
             .setDescription('The role assigned to members once they are accepted')
             .setRequired(true))
     .addStringOption(option =>
-        option.setName('symbol')
-            .setDescription("Currency symbol '$'")
+        option.setName('name')
+            .setDescription("Currency name 'Alpha'")
             .setRequired(true))
     .addChannelOption(option =>
         option.setName('feed_channel')
