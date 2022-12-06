@@ -7,8 +7,8 @@ const updateCommand = new SlashCommandBuilder()
 		option.setName('general_role')
             .setDescription('The role assigned to each member when they join'))
     .addStringOption(option =>
-        option.setName('symbol')
-            .setDescription("Currency symbol '$'"))
+        option.setName('update')
+            .setDescription("Currency name 'Alpha'"))
     .addChannelOption(option =>
         option.setName('feed_channel')
             .setDescription('What channel should transactions be publically sent in?'))
