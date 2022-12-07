@@ -1,7 +1,7 @@
 import { SlashCommandBuilder } from '@discordjs/builders';
 
-const fundExchangeCommand = new SlashCommandBuilder()
-    .setName('fund_exchange')
+const updateExchangeCommand = new SlashCommandBuilder()
+    .setName('update_exchange')
     .setDescription('Fund an existing exchange pair with an outside user and/or change the rate. (Advanced users only)')
     .addIntegerOption(option => 
         option.setName('exchange_id')
@@ -9,10 +9,9 @@ const fundExchangeCommand = new SlashCommandBuilder()
             .setRequired(true))
     .addNumberOption(option =>
 		option.setName('amount')
-            .setDescription('The amount you want to fund')
-            .setRequired(true))
+            .setDescription('The amount you want to add to the current balance of the exchange'))
     .addNumberOption(option =>
         option.setName('rate')
             .setDescription("The price in your currency that you are charging for 1 unit of the foreign currency"));
 
-export default fundExchangeCommand.toJSON();
+export default updateExchangeCommand.toJSON();
