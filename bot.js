@@ -929,6 +929,9 @@ client.on('interactionCreate', async (interaction) => {
                   if (interaction.options.getNumber('rate') !== null) {
                     updateExchange(exchange[0].id, currentExchangeBalance + amount, rate, fundsFromUser)
                     const foreignUser = await client.users.fetch(foreignExchange[0].userID)
+                    const foreignServer = await getServerStats(foreignExchange[0].serverID)
+                    const user = await client.users.fetch(exchange[0].userID)
+                    const server = await getServerStats(exchange[0].serverID)
                     if (interaction.options.getNumber('rate') !== prettyDecimal(1 / foreignExchange[0].rate)) {
                       try {
                         foreignUser.send('<@' + interaction.user.id + '> has changed the rate on their side of the exchange to ' + rate + ':1. In order for this to be a valid exchange pair, your side of the exchange would need to have the rate set to ' + prettyDecimal(1 / rate) + ". In order to do this, run the '/update_exchange' command and enter " + foreignExchange[0].id + ' as the exchangeID')
@@ -937,9 +940,21 @@ client.on('interactionCreate', async (interaction) => {
                         return
                       }
                     } else {
+                      const feedChannel = (await getServerStats(exchange[0].serverID)).feedChannel
+                      const foreignFeedChannel = (await getServerStats(foreignExchange[0].serverID)).feedChannel
                       try {
                         foreignUser.send('<@' + interaction.user.id + '> has changed the rate on their side of the exchange to ' + rate + ':1. The exchange pair is valid')
                       } catch (error) {}
+                      if (foreignFeedChannel !== null && foreignFeedChannel !== '') {
+                        try {
+                          await sendMessage('The exchange for ' + server.name + ' shares (' + (await client.guilds.fetch(exchange[0].serverID)).name  + '), run by <@' + foreignExchange[0].userID + ">, is now active! View all exchanges by running the '/exchanges' command.", foreignFeedChannel)
+                        } catch (error) {} 
+                      }
+                      if (feedChannel !== null && feedChannel !== '') {
+                        try {
+                          await sendMessage('The exchange for ' + foreignServer.name + ' shares (' + (await client.guilds.fetch(foreignExchange[0].serverID)).name  + '), run by <@' + exchange[0].userID+ ">, is now active! View all exchanges by running the '/exchanges' command.", feedChannel)
+                        } catch (error) {} 
+                      }
                     }
                   } else {
                     updateExchange(exchange[0].id, currentExchangeBalance + amount, exchange[0].rate, fundsFromUser)
@@ -1128,7 +1143,9 @@ client.on('interactionCreate', async (interaction) => {
               interaction.editReply({content: 'You have successfully requested to join the ' + serverDisplayName + ' group!', ephemeral: true})
               interaction.member.send('You have successfully requested to join the ' + serverDisplayName + ' group!').catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you if you are accepted!', ephemeral: true})});
               if (stats.feedChannel !== null && stats.feedChannel !== '') {
-                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> has requested to join the group! Use '/endorse' if you'd like to give them an endorsement!")
+                try {
+                  interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> has requested to join the group! Use '/endorse' if you'd like to give them an endorsement!")
+                } catch (error) {}
               }
           }
         } else if (await userExists(senderID, serverID)) {
@@ -1158,7 +1175,9 @@ client.on('interactionCreate', async (interaction) => {
                   clearRequest(receiverID, serverID)
                   interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
                   if (stats.feedChannel !== null && stats.feedChannel !== '') {
-                    interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the group!')
+                    try {
+                      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the group!')
+                    } catch (error) {}
                   }
                 } 
             }
@@ -1266,7 +1285,7 @@ client.on('interactionCreate', async (interaction) => {
             }
             await updateServer(serverID, interaction.options.getRole('general_role'), interaction.options.getString('name'), interaction.options.getChannel('feed_channel'), interaction.options.getBoolean('remove_feed'))
             const updatedStats = await getServerStats(serverID)
-            if (updatedStats.feedChannel === null) {
+            if (updatedStats.feedChannel === null && updatedStats.feedChannel !== '') {
               interaction.editReply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nName: ' + updatedStats.name + '\nFeed channel: None', ephemeral: true})
             } else {
               interaction.editReply({content: 'Server settings have been updated!\n\nGeneral role: <@&' + updatedStats.generalRoleID + '>\nName: ' + updatedStats.name + '\nFeed channel: <#' + updatedStats.feedChannel + '>', ephemeral: true})
@@ -1275,7 +1294,7 @@ client.on('interactionCreate', async (interaction) => {
             interaction.editReply({content: 'Must be server admin', ephemeral: true})
           }
       } else if (interaction.commandName === 'settings') {
-        if (stats.feedChannel === null) {
+        if (stats.feedChannel === null && stats.feedChannel !== '') {
           interaction.editReply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nName: ' + stats.name + '\nFeed channel: None', ephemeral: true})
         } else {
           interaction.editReply({content: 'Current server settings:\n\nGeneral role: <@&' + stats.generalRoleID + '>\nName: ' + stats.name + '\nFeed channel: <#' + stats.feedChannel + '>', ephemeral: true})
@@ -1407,8 +1426,9 @@ client.on('interactionCreate', async (interaction) => {
               }
             }
             const foreignUser = await client.users.fetch(interaction.options.getString('user'))
+            const foreignServer = await getServerStats(interaction.options.getString('server'))
             const rate = prettyDecimal(interaction.options.getNumber('rate'))
-            const newExPair = await addExchangePair(senderID, serverID, amount, rate, foreignUser.id, interaction.options.getString('server'), 0, 0)
+            const newExPair = await addExchangePair(senderID, serverID, amount, rate, foreignUser.id, foreignServer.serverID, 0, 0)
             addForeignExchangeID(newExPair[0].id, newExPair[1].id)
             addForeignExchangeID(newExPair[1].id, newExPair[0].id)
             updateBalance(senderID, serverID, balance - amount)
@@ -1417,6 +1437,11 @@ client.on('interactionCreate', async (interaction) => {
               interaction.editReply({content: "The exchange has been added and <@" + foreignUser + '> has been notified to update their side of the exchange!', ephemeral: true})
             } catch (error) {
               interaction.editReply({content: "The exchange has been added, but we were unable to DM <@" + foreignUser + ">. They will need to update their side by using '/update_exchange'", ephemeral: true})
+            }
+            if (stats.feedChannel !== null && stats.feedChannel !== '') { 
+              try {
+                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> has created an exchange for " + foreignServer.name + ' shares (' + (await client.guilds.fetch(foreignServer.serverID)).name + '). Now waiting on the member from ' + (await client.guilds.fetch(foreignServer.serverID)).name + " to fund their side of the exchange! To see all exchanges from this server, run the '/exchanges' command.")
+              } catch (error) {}
             }
           } else {
             interaction.editReply({content: 'You currently have __**s**__' + balance + ', but __**s**__' + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
@@ -1433,10 +1458,15 @@ client.on('interactionCreate', async (interaction) => {
             return
           }
           for (let i = 0; i < serverExchanges.length; i += 1) {
-            const foExID = (await getExchangeByID(serverExchanges[i].id))[0].foreignExchangeID
+            const foreignExchange = await getExchangeByID(serverExchanges[i].id)
+            const foExID = foreignExchange[0].foreignExchangeID
             const pairing = await getExchangeByID(foExID)
             const foreignName = (await getServerStats(pairing[0].serverID)).name
-            message += '<@' + serverExchanges[i].userID + '> created an exchange for ' + foreignName + ' shares ' + ' (' + (await client.guilds.fetch(pairing[0].serverID)).name  + ') which has a current balance of ' + prettyDecimal(pairing[i].balance) + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1\n'
+            let status = 'inactive'
+            if (prettyDecimal(foreignExchange[i].rate) === prettyDecimal(1 / pairing[0].rate)) {
+              status = 'active'
+            }
+            message += '<@' + serverExchanges[i].userID + '> created an exchange for ' + foreignName + ' shares ' + ' (' + (await client.guilds.fetch(pairing[0].serverID)).name  + ') which has a current balance of ' + prettyDecimal(pairing[i].balance) + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1. This exchange is currently ' + status + '.\n'
           }
           interaction.editReply({content: message, ephemeral: true})
         } else if (interaction.commandName === 'transfer') {
