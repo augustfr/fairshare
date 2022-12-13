@@ -1250,10 +1250,10 @@ client.on('interactionCreate', async (interaction) => {
           if (isNaN(votes[0].fee)) {
             interaction.editReply({content: "No votes have been recorded yet. Try voting by typing '/vote'", ephemeral: true})
           } else {
-            interaction.editReply({content: votes[0].length + ' votes so far, result would be a ' + votes[0].fee + '% transaction fee and a ' + name + votes[0].income + ' daily income', ephemeral: true})
+            interaction.editReply({content: votes[0].length + ' votes so far, result would be a ' + votes[0].fee + '% transaction fee and a __**s**__' + votes[0].income + ' daily income', ephemeral: true})
           }
         } else if (interaction.commandName === 'rates') {
-          interaction.editReply({content: 'Current rates:\n' + stats.fee + '% transaction fee\n' +  name + stats.income + ' daily income', ephemeral: true})
+          interaction.editReply({content: 'Current rates:\n' + stats.fee + '% transaction fee\n__**s**__' + stats.income + ' daily income', ephemeral: true})
         } else if (interaction.commandName === 'accept_votes') {
           if (interaction.member.roles.cache.has(stats.adminRoleID)) {
             const votes = await tally(serverID)
@@ -1263,7 +1263,7 @@ client.on('interactionCreate', async (interaction) => {
               const votes = await tally(serverID)
               acceptVotes(serverID, votes[0].fee, votes[0].income)
               clearVotes(serverID)
-              interaction.editReply({content: votes[0].length + ' votes have been accepted and the new rates are now active.\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' + votes[0].income + name + ' shares daily income', ephemeral: true})
+              interaction.editReply({content: votes[0].length + ' votes have been accepted and the new rates are now active.\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n__**s**__' + votes[0].income + ' daily income', ephemeral: true})
             }
           } else {
             interaction.editReply({content: 'Must be server admin', ephemeral: true})
