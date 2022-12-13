@@ -1254,20 +1254,6 @@ client.on('interactionCreate', async (interaction) => {
           }
         } else if (interaction.commandName === 'rates') {
           interaction.editReply({content: 'Current rates:\n' + stats.fee + '% transaction fee\n__**s**__' + stats.income + ' daily income', ephemeral: true})
-        } else if (interaction.commandName === 'accept_votes') {
-          if (interaction.member.roles.cache.has(stats.adminRoleID)) {
-            const votes = await tally(serverID)
-            if (isNaN(votes[0].fee)) {
-              interaction.editReply({content: 'No votes have been recorded.', ephemeral: true})
-            } else {
-              const votes = await tally(serverID)
-              acceptVotes(serverID, votes[0].fee, votes[0].income)
-              clearVotes(serverID)
-              interaction.editReply({content: votes[0].length + ' votes have been accepted and the new rates are now active.\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n__**s**__' + votes[0].income + ' daily income', ephemeral: true})
-            }
-          } else {
-            interaction.editReply({content: 'Must be server admin', ephemeral: true})
-          }
         } else if (interaction.commandName === 'update') {
           if (interaction.member.roles.cache.has(stats.adminRoleID)) {
             if (interaction.options.getRole('general_role') !== null) {
