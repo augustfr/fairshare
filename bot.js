@@ -1230,15 +1230,15 @@ client.on('interactionCreate', async (interaction) => {
                 const votes = await tally(serverID)
                 if (await userVoted(senderID, serverID)) {
                   updateVote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
-                  interaction.editReply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + name + interaction.options.getNumber('income') + ' daily income has been updated!', ephemeral: true})
+                  interaction.editReply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a __**s**__' + interaction.options.getNumber('income') + ' daily income has been updated!', ephemeral: true})
                 } else {
                   if ((votes[0].length + 1) > (superMajority * numUsers)) {
                     acceptVotes(serverID, prettyDecimal(votes[0].fee), prettyDecimal(votes[0].income))
                     clearVotes(serverID)
-                    interaction.editReply({content: 'Your vote has reached a super majority and the votes have been accepted!\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' +  name + votes[0].income + ' daily income', ephemeral: true})
+                    interaction.editReply({content: 'Your vote has reached a super majority and the votes have been accepted!\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n__**s**__' + votes[0].income + ' daily income', ephemeral: true})
                   } else {
                     vote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
-                    interaction.editReply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + name + interaction.options.getNumber('income') + ' daily income has been recorded!', ephemeral: true})
+                    interaction.editReply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a __**s**__' + interaction.options.getNumber('income') + ' daily income has been recorded!', ephemeral: true})
                   }
                 }
               }
