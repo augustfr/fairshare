@@ -1452,7 +1452,8 @@ client.on('interactionCreate', async (interaction) => {
             if (prettyDecimal(foreignExchange[i].rate) === prettyDecimal(1 / pairing[0].rate)) {
               status = 'active'
             }
-            message += '<@' + serverExchanges[i].userID + '> created an exchange for ' + foreignName + ' shares (' + (await client.guilds.fetch(pairing[0].serverID)).name  + ') which has a current balance of ' + prettyDecimal(pairing[i].balance) + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1. This exchange is currently ' + status + '.\n'
+            console.log((await client.guilds.fetch(pairing[0].serverID)).id)
+            message += '<@' + serverExchanges[i].userID + '> created an exchange for ' + foreignName + ' shares (' + (await client.guilds.fetch(pairing[0].serverID)).name  + ' - ' + (await client.guilds.fetch(pairing[0].serverID)).id + ') which has a current balance of ' + prettyDecimal(pairing[i].balance) + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1. This exchange is currently ' + status + '.\n'
           }
           interaction.editReply({content: message, ephemeral: true})
         } else if (interaction.commandName === 'transfer') {
@@ -1660,5 +1661,5 @@ export async function main() {
 }
 
 main()
-runPayments()
+//runPayments()
 checkCoupons()
