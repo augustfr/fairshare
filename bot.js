@@ -2,6 +2,7 @@ import { config } from 'dotenv';
 import { runPayments } from './dailyPayments.js'
 import { sendMessage } from './dailyPayments.js'
 import { checkCoupons } from './couponChecker.js'
+import { checkRequests } from './requestChecker.js'
 import {
   Client,
   GatewayIntentBits,
@@ -1662,3 +1663,4 @@ export async function main() {
 main()
 runPayments()
 checkCoupons()
+checkRequests()
