@@ -1318,7 +1318,7 @@ client.on('interactionCreate', async (interaction) => {
               if (numUsers === 2 && currentVotes > 1) {
                 votesNeeded = 1
               } else {
-                votesNeeded = Math.ceil((simpleMajority * numUsers) - (currentVotes - 1))
+                votesNeeded = Math.ceil((simpleMajority * numUsers) - currentVotes)
               }
               if (votesNeeded > 1) {
                 message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsements needed\n')
