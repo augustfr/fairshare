@@ -1164,6 +1164,11 @@ client.on('interactionCreate', async (interaction) => {
                 addEndorsement(receiverID, serverID, currentVotes + 1)
                 recordEndorsement(senderID, receiverID, serverID)
                 interaction.editReply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
+                if (stats.feedChannel !== null && stats.feedChannel !== '') {
+                  try {
+                    interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> endorsed <@" + receiverID + '>')
+                  } catch (error) {}
+                }
                 if (((currentVotes + 1) > (simpleMajority * numUsers)) || (numUsers === 2 && currentVotes > 1)) {
                   try {
                     await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.add(String(stats.generalRoleID)).catch((err) => {console.log(err)});
