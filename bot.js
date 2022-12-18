@@ -1311,8 +1311,20 @@ client.on('interactionCreate', async (interaction) => {
           if (candidates.length === 0) {
             interaction.editReply({content: "There are no current candidates for this group", ephemeral: true})
           } else {
+            let votesNeeded
+            const numUsers = (await getUsers(serverID)).length
             for (let i = 0; i < candidates.length; i += 1) {
-              message += ('<@' + candidates[i].userID + '>\n')
+              let currentVotes = await getUserEndorsements(candidates[i].userID, serverID)
+              if (numUsers === 2 && currentVotes > 1) {
+                votesNeeded = 1
+              } else {
+                votesNeeded = roundUp((simpleMajority * numUsers) - (currentVotes - 1))
+              }
+              if (votesNeeded > 1) {
+                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsements needed\n')
+              } else {
+                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsement needed\n')
+              }
             }
             message += "\nUse '/endorse' to endorse any of the above candidates!"
             interaction.editReply({content: message, ephemeral: true})
@@ -1666,6 +1678,6 @@ export async function main() {
 }
 
 main()
-runPayments()
+//runPayments()
 checkCoupons()
 checkRequests()
