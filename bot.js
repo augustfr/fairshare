@@ -1140,6 +1140,9 @@ client.on('interactionCreate', async (interaction) => {
           if (await userExists(senderID, serverID)) {
             interaction.editReply({content: 'You are already in this group', ephemeral: true})
           } else {
+            try {
+              const currentVotes = await getUserEndorsements(senderID, serverID)
+            } catch (error) {
               requestToJoin(senderID, serverID)
               interaction.editReply({content: 'You have successfully requested to join the ' + serverDisplayName + " group!\n\nIf you aren't accepted into the group within a week, your request will expire and you'll have to submit a new join request.", ephemeral: true})
               interaction.member.send('You have successfully requested to join the ' + serverDisplayName + " group!\n\nIf you aren't accepted into the group within a week, your request will expire and you'll have to submit a new join request.").catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you if you are accepted!', ephemeral: true})});
@@ -1148,6 +1151,9 @@ client.on('interactionCreate', async (interaction) => {
                   interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> has requested to join the group! Use '/endorse' if you'd like to give them an endorsement!")
                 } catch (error) {}
               }
+              return
+            }
+            interaction.editReply({content: 'You have already requested to join this group', ephemeral: true})
           }
         } else if (await userExists(senderID, serverID)) {
           if (interaction.commandName === 'balance') {
