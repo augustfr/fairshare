@@ -1327,9 +1327,14 @@ client.on('interactionCreate', async (interaction) => {
                 votesNeeded = Math.ceil((simpleMajority * numUsers) - currentVotes)
               }
               if (votesNeeded > 1) {
-                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsements needed\n')
+                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsements needed')
               } else {
-                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsement needed\n')
+                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsement needed')
+              }
+              if (await alreadyEndorsed(senderID, candidates[i].userID, serverID)) {
+                message += ' ✅\n'
+              } else {
+                message += ' ❌\n'
               }
             }
             message += "\nUse '/endorse' to endorse any of the above candidates!"
