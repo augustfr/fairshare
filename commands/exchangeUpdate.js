@@ -1,7 +1,7 @@
 import { SlashCommandBuilder } from '@discordjs/builders';
 
 const updateExchangeCommand = new SlashCommandBuilder()
-    .setName('update_exchange')
+    .setName('exchange_update')
     .setDescription('Fund an existing exchange pair with an outside user and/or change the rate. (Advanced users only)')
     .addIntegerOption(option => 
         option.setName('exchange_id')

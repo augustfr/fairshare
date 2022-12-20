@@ -1,7 +1,7 @@
 import { SlashCommandBuilder } from '@discordjs/builders';
 
 const addExchangeCommand = new SlashCommandBuilder()
-    .setName('add_exchange')
+    .setName('exchange_add')
     .setDescription('Add an exchange pair with an outside user. (Advanced users only)')
     .addStringOption(option => 
         option.setName('user')

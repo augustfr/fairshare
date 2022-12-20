@@ -31,15 +31,15 @@ import EndorseCommand from './commands/endorse.js';
 import CandidatesCommand from './commands/candidates.js';
 import StrikeCommand from './commands/strike.js';
 import RecentCommand from './commands/recent.js';
-import AddExchangeCommand from './commands/addExchange.js';
-import UpdateExchangeCommand from './commands/updateExchange.js';
+import AddExchangeCommand from './commands/exchangeAdd.js';
+import UpdateExchangeCommand from './commands/exchangeUpdate.js';
 import ExchangesCommand from './commands/exchanges.js';
 import TransferCommand from './commands/transfer.js';
 import RedeemCommand from './commands/redeem.js';
-import WithdrawCommand from './commands/withdraw.js';
+import ExchangeWithdrawCommand from './commands/exchangeWithdraw.js';
 import MyExchangeCommand from './commands/myExchange.js';
-import WithdrawFeesCommand from './commands/withdrawFees.js';
-import WithdrawMembershipCommand from './commands/withdrawMembership.js'
+import ExchangeWithdrawFeesCommand from './commands/exchangeWithdrawFees.js';
+import WithdrawCommand from './commands/withdraw.js'
 
 
 config();
@@ -878,11 +878,11 @@ client.on('interactionCreate', async (interaction) => {
           }
         }
         if (message.length === 0) {
-          message += "You are not a part of any exchanges. Create one by running the '/add_exchange' command!"
+          message += "You are not a part of any exchanges. Create one by running the '/exchange_add' command!"
         }
         interaction.editReply({content: message, ephemeral: true})
       }
-    } else if (interaction.commandName === 'withdraw') {
+    } else if (interaction.commandName === 'exchange_withdraw') {
       if (globalUserStats.length === 0) {
         interaction.editReply({content: 'You are not a member of any groups', ephemeral: true})
       } else {
@@ -908,7 +908,7 @@ client.on('interactionCreate', async (interaction) => {
           interaction.editReply({content: 'Invalid exchange ID', ephemeral: true})
         }
       }
-    } else if (interaction.commandName === 'withdraw_fees') {
+    } else if (interaction.commandName === 'exchange_withdraw_fees') {
       if (globalUserStats.length === 0) {
         interaction.editReply({content: 'You are not a member of any groups', ephemeral: true})
       } else {
@@ -928,7 +928,7 @@ client.on('interactionCreate', async (interaction) => {
           interaction.editReply({content: 'Invalid exchange ID', ephemeral: true})
         }
       }
-    } else if (interaction.commandName === 'update_exchange') {
+    } else if (interaction.commandName === 'exchange_update') {
       const exchange = await getExchangeByID(interaction.options.getInteger('exchange_id'))
       const foreignExchange = await getExchangeByID(exchange[0].foreignExchangeID)
       if (interaction.options.getNumber('rate') === null && interaction.options.getNumber('amount') === null) {
@@ -954,9 +954,9 @@ client.on('interactionCreate', async (interaction) => {
                     const server = await getServerStats(exchange[0].serverID)
                     if (interaction.options.getNumber('rate') !== prettyDecimal(1 / foreignExchange[0].rate)) {
                       try {
-                        foreignUser.send('<@' + interaction.user.id + '> has changed the rate on their side of the exchange to ' + rate + ':1. In order for this to be a valid exchange pair, your side of the exchange would need to have the rate set to ' + prettyDecimal(1 / rate) + ". In order to do this, run the '/update_exchange' command and enter " + foreignExchange[0].id + ' as the exchangeID')
+                        foreignUser.send('<@' + interaction.user.id + '> has changed the rate on their side of the exchange to ' + rate + ':1. In order for this to be a valid exchange pair, your side of the exchange would need to have the rate set to ' + prettyDecimal(1 / rate) + ". In order to do this, run the '/exchange_update' command and enter " + foreignExchange[0].id + ' as the exchangeID')
                       } catch (error) {
-                        interaction.editReply({content: "The exchange has been successfully updated, but we were unable to DM <@" + foreignUser + ">, most likely due to them not allowing DMs from the FairShare bot. If possible, let them know that in order for this exchange pair to be valid, they'll need to run the '/update_exchange' command, use " + foreignExchange[0].id + ' as the exchangeID, and set the rate on their side to ' + prettyDecimal(1 / rate), ephemeral: true})
+                        interaction.editReply({content: "The exchange has been successfully updated, but we were unable to DM <@" + foreignUser + ">, most likely due to them not allowing DMs from the FairShare bot. If possible, let them know that in order for this exchange pair to be valid, they'll need to run the '/exchange_update' command, use " + foreignExchange[0].id + ' as the exchangeID, and set the rate on their side to ' + prettyDecimal(1 / rate), ephemeral: true})
                         return
                       }
                     } else {
@@ -1114,8 +1114,8 @@ client.on('interactionCreate', async (interaction) => {
             interaction.editReply({content: message, ephemeral: true})
           }
         }
-    } else if (interaction.commandName !== 'redeem' && interaction.commandName !== 'my_exchanges' && interaction.commandName !== 'withdraw' && interaction.commandName !== 'withdraw_fees' && interaction.commandName !== 'update_exchange') {
-        interaction.editReply({content: "Only the '/balance', '/recent', '/redeem', '/withdraw', '/withdraw_fees', '/my_exchanges', and '/update_exchange commands work in DMs. Please go to your individual group to use the other commands.", ephemeral: true})
+    } else if (interaction.commandName !== 'redeem' && interaction.commandName !== 'my_exchanges' && interaction.commandName !== 'exchange_withdraw' && interaction.commandName !== 'exchange_withdraw_fees' && interaction.commandName !== 'exchange_update') {
+        interaction.editReply({content: "Only the '/balance', '/recent', '/redeem', '/exchange_withdraw', '/exchange_withdraw_fees', '/my_exchanges', and '/exchange_update commands work in DMs. Please go to your individual group to use the other commands.", ephemeral: true})
       }
     } else {
       const serverID = interaction.guildId
@@ -1454,7 +1454,7 @@ client.on('interactionCreate', async (interaction) => {
             }
             interaction.editReply({content: sentMessage + receivedMessage + sentExtMessage + receivedExtMessage, ephemeral: true})
           }
-        } else if (interaction.commandName === 'add_exchange') {
+        } else if (interaction.commandName === 'exchange_add') {
           const userExchanges = await getExchanges(senderID, serverID)
           const balance = prettyDecimal(await getUserBalance(senderID, serverID))
           const amount = prettyDecimal(interaction.options.getNumber('amount'))
@@ -1477,10 +1477,10 @@ client.on('interactionCreate', async (interaction) => {
             addForeignExchangeID(newExPair[1].id, newExPair[0].id)
             updateBalance(senderID, serverID, balance - amount)
             try {
-              foreignUser.send('<@' + interaction.user.id + '> has created an exchange with you. On their side, they set the rate to ' + rate + ':1. In order for this to be a valid exchange pair, you will need to add some funding, and change the rate on your side of the exchange to ' + prettyDecimal(1 / rate) + ". In order to do this, run the '/update_exchange' command and use " + newExPair[1].id + " as the exchangeID. To view your current exchanges, run the '/my_exchanges' command")
+              foreignUser.send('<@' + interaction.user.id + '> has created an exchange with you. On their side, they set the rate to ' + rate + ':1. In order for this to be a valid exchange pair, you will need to add some funding, and change the rate on your side of the exchange to ' + prettyDecimal(1 / rate) + ". In order to do this, run the '/exchange_update' command and use " + newExPair[1].id + " as the exchangeID. To view your current exchanges, run the '/my_exchanges' command")
               interaction.editReply({content: "The exchange has been added and <@" + foreignUser + '> has been notified to update their side of the exchange!', ephemeral: true})
             } catch (error) {
-              interaction.editReply({content: "The exchange has been added, but we were unable to DM <@" + foreignUser + ">. They will need to update their side by using '/update_exchange'", ephemeral: true})
+              interaction.editReply({content: "The exchange has been added, but we were unable to DM <@" + foreignUser + ">. They will need to update their side by using '/exchange_update'", ephemeral: true})
             }
             if (stats.feedChannel !== null && stats.feedChannel !== '') { 
               try {
@@ -1498,7 +1498,7 @@ client.on('interactionCreate', async (interaction) => {
           } else if (serverExchanges.length > 1) {
             message = serverDisplayName + ' has ' + serverExchanges.length + ' exchanges:\n\n'
           } else {
-            interaction.editReply({content: "This group has no exchanges. Create your own with '/add_exchange'", ephemeral: true})
+            interaction.editReply({content: "This group has no exchanges. Create your own with '/exchange_add'", ephemeral: true})
             return
           }
           for (let i = 0; i < serverExchanges.length; i += 1) {
@@ -1569,18 +1569,18 @@ client.on('interactionCreate', async (interaction) => {
               }
             }
           }
-        } else if (interaction.commandName === 'withdraw_membership') {
+        } else if (interaction.commandName === 'withdraw') {
           const balance = prettyDecimal(await getUserBalance(senderID, serverID))
           const row = new ActionRowBuilder()
                   .addComponents(
                     new ButtonBuilder()
-                      .setCustomId('withdraw_membership')
+                      .setCustomId('withdraw')
                       .setLabel('Withdraw')
                       .setStyle(ButtonStyle.Danger));
 
           const embed = new EmbedBuilder()
                   .setColor(0x0099FF)
-                  .setTitle('Withdraw Membership')
+                  .setTitle('Withdraw From Group')
                   .setDescription('Are you sure you want to withdraw yourself from this group? Your current balance of  __**s**__' + balance + ' will be burned and will not be recoverable.');
                 await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
         }
@@ -1681,7 +1681,7 @@ client.on('interactionCreate', async (interaction) => {
         interaction.editReply({content: 'This payment has already been redeemed', ephemeral: true})
       }
     }
-  } else if (interaction.customId === 'withdraw_membership') {
+  } else if (interaction.customId === 'withdraw') {
     const serverID = interaction.guildId
     const senderID = interaction.user.id
     if (await userExists(senderID, serverID)) { 
@@ -1746,10 +1746,10 @@ export async function main() {
     ExchangesCommand,
     TransferCommand,
     RedeemCommand,
-    WithdrawCommand,
+    ExchangeWithdrawCommand,
     MyExchangeCommand,
-    WithdrawFeesCommand,
-    WithdrawMembershipCommand
+    ExchangeWithdrawFeesCommand,
+    WithdrawCommand
   ];
 
     try {
