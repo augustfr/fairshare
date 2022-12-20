@@ -227,11 +227,11 @@ async function couponExists(coupon) {
   }
 }
 
-async function addRedeemLog(userID, coupon, amount, exID, originServerID, serverID) {
+async function addRedeemLog(userID, coupon, amount, exID, originServerID, serverID, fee) {
   const currentDate = new Date();
   const { data, error } = await supabase
   .from('redeemLog')
-  .insert({userID: userID, coupon: coupon, amount: amount, creationDate: currentDate, exchangeID: exID, originServerID: originServerID, serverID: serverID})
+  .insert({userID: userID, coupon: coupon, amount: amount, creationDate: currentDate, exchangeID: exID, originServerID: originServerID, serverID: serverID, fee: fee})
   .select()
   return data
 }
@@ -808,7 +808,7 @@ client.on('interactionCreate', async (interaction) => {
                   if (redeemLog.length > 0) {
                     redeemID = redeemLog[0].id
                   } else {
-                    redeemID = (await addRedeemLog(senderID, coupon[0].coupon, amount - fee, bestRoute.exID, coupon[0].originServerID, coupon[0].serverID))[0].id
+                    redeemID = (await addRedeemLog(senderID, coupon[0].coupon, amount - fee, bestRoute.exID, coupon[0].originServerID, coupon[0].serverID, fee))[0].id
                   }
                   const row = new ActionRowBuilder()
                     .addComponents(
@@ -951,7 +951,6 @@ client.on('interactionCreate', async (interaction) => {
                     updateExchange(exchange[0].id, currentExchangeBalance + amount, rate, fundsFromUser)
                     const foreignUser = await client.users.fetch(foreignExchange[0].userID)
                     const foreignServer = await getServerStats(foreignExchange[0].serverID)
-                    const user = await client.users.fetch(exchange[0].userID)
                     const server = await getServerStats(exchange[0].serverID)
                     if (interaction.options.getNumber('rate') !== prettyDecimal(1 / foreignExchange[0].rate)) {
                       try {
@@ -969,7 +968,9 @@ client.on('interactionCreate', async (interaction) => {
                       if (foreignFeedChannel !== null && foreignFeedChannel !== '') {
                         try {
                           await sendMessage('The exchange for ' + server.name + ' shares (' + (await client.guilds.fetch(exchange[0].serverID)).name  + '), run by <@' + foreignExchange[0].userID + ">, is now active! View all exchanges by running the '/exchanges' command.", foreignFeedChannel)
-                        } catch (error) {} 
+                        } catch (error) {
+                          console.log(error)
+                        } 
                       }
                       if (feedChannel !== null && feedChannel !== '') {
                         try {
@@ -1181,6 +1182,10 @@ client.on('interactionCreate', async (interaction) => {
           if (candidates.length === 0) {
             interaction.editReply({content: "There are no current candidates for this group", ephemeral: true})
           } else {
+            let exists = false
+            if (await userExists(senderID, serverID)) { 
+              exists = true
+            }
             let votesNeeded
             const numUsers = (await getUsers(serverID)).length
             for (let i = 0; i < candidates.length; i += 1) {
@@ -1195,7 +1200,7 @@ client.on('interactionCreate', async (interaction) => {
               } else {
                 message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsement needed')
               } 
-              if (await userExists(senderID, serverID)) {
+              if (exists) {
                 if (await alreadyEndorsed(senderID, candidates[i].userID, serverID)) {
                   message += ' ✅\n'
                 } else {
@@ -1502,10 +1507,10 @@ client.on('interactionCreate', async (interaction) => {
             const pairing = await getExchangeByID(foExID)
             const foreignName = (await getServerStats(pairing[0].serverID)).name
             let status = 'inactive'
-            if (prettyDecimal(foreignExchange[i].rate) === prettyDecimal(1 / pairing[0].rate)) {
+            if (prettyDecimal(foreignExchange[0].rate) === prettyDecimal(1 / pairing[0].rate)) {
               status = 'active'
             }
-            message += '<@' + serverExchanges[i].userID + '> created an exchange for ' + foreignName + ' shares (' + (await client.guilds.fetch(pairing[0].serverID)).name  + ' - ' + (await client.guilds.fetch(pairing[0].serverID)).id + ') which has a current balance of ' + prettyDecimal(pairing[i].balance) + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1. This exchange is currently ' + status + '.\n'
+            message += '<@' + serverExchanges[i].userID + '> created an exchange for ' + foreignName + ' shares (' + (await client.guilds.fetch(pairing[0].serverID)).name  + ' - ' + (await client.guilds.fetch(pairing[0].serverID)).id + ') which has a current balance of ' + prettyDecimal(pairing[0].balance) + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1. This exchange is currently ' + status + '.\n\n'
           }
           interaction.editReply({content: message, ephemeral: true})
         } else if (interaction.commandName === 'transfer') {
@@ -1610,6 +1615,7 @@ client.on('interactionCreate', async (interaction) => {
               await sendMessage('<@' + interaction.user.id + '> started an external payment to ' + serverDisplayName, stats.feedChannel)
             }
           } catch (error) {
+            console.log(error)
             interaction.followUp({content: 'Payment was successfully created but is unable to be sent into the assigned feed channel. Let server admin know.', ephemeral: true})
           } 
         }
@@ -1638,9 +1644,10 @@ client.on('interactionCreate', async (interaction) => {
         const amount =  redeemLog[0].amount
         const fee = (100 - stats.fee)/100
         updateBalance(interaction.user.id, coupon[0].serverID, balance + amount)
-        updateExchange(exchange_a[0].id, exchange_a[0].balance - (amount / fee), exchange_a[0].rate)
-        updateExchange(exchange_b[0].id, exchange_b[0].balance + coupon[0].amount, exchange_b[0].rate)
+        updateExchange(exchange_a[0].id, exchange_a[0].balance + coupon[0].amount, exchange_a[0].rate)
+        updateExchange(exchange_b[0].id, exchange_b[0].balance - (amount / fee), exchange_b[0].rate)
         payExchange(exchange_a[0].id, (exchange_a[0].feesEarned + coupon[0].fee))
+        payExchange(exchange_b[0].id, (exchange_b[0].feesEarned + redeemLog[0].fee))
         couponRedeemed(coupon[0].coupon)
         redeemed(redeemID)
         interaction.editReply({content: 'Your redemption was successful. Your current balance in ' + serverDisplayName + ' is: ' + (balance + redeemLog[0].amount) + ' ' + stats.name + ' shares', ephemeral: true})
@@ -1766,6 +1773,6 @@ export async function main() {
 }
 
 main()
-//runPayments()
+runPayments()
 checkCoupons()
 checkRequests()
