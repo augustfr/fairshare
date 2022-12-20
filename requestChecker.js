@@ -1,6 +1,6 @@
 import { config } from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
-import { clearEndorsements, clearRequest } from './bot';
+import { clearEndorsements, clearRequest } from './bot.js';
 
 config();
 
