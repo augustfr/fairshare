@@ -9,7 +9,7 @@ const setupCommand = new SlashCommandBuilder()
             .setRequired(true))
     .addStringOption(option =>
         option.setName('name')
-            .setDescription("Currency name 'Alpha'")
+            .setDescription("Currency name (example: 'Alpha')")
             .setRequired(true))
     .addChannelOption(option =>
         option.setName('feed_channel')

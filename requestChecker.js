@@ -1,5 +1,6 @@
 import { config } from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import { clearEndorsements, clearRequest } from './bot';
 
 config();
 
@@ -14,26 +15,10 @@ async function getRequests() {
   const { data, error } = await supabase
   .from('joinRequests')
   .select()
-  const requestIDs = data.map(a => a.id)
   const requesterIDs = data.map(a => a.userID)
   const creationTimes = data.map(a => a.requestDate)
   const serverIDs = data.map(a => a.serverID)
-  return {requestIDs, creationTimes, requesterIDs, serverIDs}
-}
-
-async function deleteRequest(id) {
-  const { error } = await supabase 
-  .from('joinRequests')
-  .delete()
-  .eq('id', id)
-}
-
-async function deleteEndorsement(receiverID, serverID) {
-  const { error } = await supabase 
-  .from('endorsements')
-  .delete()
-  .eq('receiverID', receiverID)
-  .eq('serverID', serverID)
+  return {creationTimes, requesterIDs, serverIDs}
 }
 
 function sleep(ms) {
@@ -43,11 +28,11 @@ function sleep(ms) {
 export async function checkRequests() {
   while (true) {
     const requestList = await getRequests()
-    for (let i = 0; i < requestList.requestIDs.length; i++) {
+    for (let i = 0; i < requestList.requesterIDs.length; i++) {
       if (requestList.creationTimes.length > 0) {
         if ((Date.now() - (new Date(requestList.creationTimes[i]).getTime()) > 604800000)) {
-          await deleteRequest(requestList.requestIDs[i])
-          await deleteEndorsement(requestList.requesterIDs[i], requestList.serverIDs[i])
+          clearRequest(requestList.requesterIDs[i], requestList.serverIDs[i])
+          await clearEndorsements(requestList.requesterIDs[i], requestList.serverIDs[i])
           console.log('Deleted request by ' + requestList.requesterIDs[i] + ' in serverID: ' + requestList.serverIDs[i])
         }
       }

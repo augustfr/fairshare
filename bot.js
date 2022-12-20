@@ -567,7 +567,7 @@ async function terminateUser(userID, serverID) {
   .eq('userID', userID)
 }
 
-async function clearEndorsements(receiverID, serverID) {
+export async function clearEndorsements(receiverID, serverID) {
   const { error } = await supabase 
   .from('endorsements')
   .delete()
@@ -575,7 +575,7 @@ async function clearEndorsements(receiverID, serverID) {
   .eq('receiverID', receiverID)
 }
 
-async function clearRequest(userID, serverID) {
+export async function clearRequest(userID, serverID) {
   const { error } = await supabase 
   .from('joinRequests')
   .delete()
@@ -1766,6 +1766,6 @@ export async function main() {
 }
 
 main()
-runPayments()
+//runPayments()
 checkCoupons()
 checkRequests()
