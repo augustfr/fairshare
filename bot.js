@@ -39,6 +39,7 @@ import RedeemCommand from './commands/redeem.js';
 import WithdrawCommand from './commands/withdraw.js';
 import MyExchangeCommand from './commands/myExchange.js';
 import WithdrawFeesCommand from './commands/withdrawFees.js';
+import WithdrawMembershipCommand from './commands/withdrawMembership.js'
 
 
 config();
@@ -138,6 +139,16 @@ async function getUserEndorsements(userID, serverID) {
   .eq('userID', userID)
   .eq('serverID', serverID)
   return data[0].votes
+}
+
+async function getAllEndorsements(serverID) {
+  const { data, error } = await supabase
+  .from('joinRequests')
+  .select()
+  .eq('serverID', serverID)
+  const userIDs = data.map(a => a.userID)
+  const votes = data.map(a => a.votes)
+  return [userIDs, votes]
 }
 
 async function addEndorsement(userID, serverID, updatedCount) {
@@ -354,6 +365,15 @@ export async function getUserBalance(userID, serverID) {
   .eq('userID', userID)
   .eq('serverID', serverID)
   return data[0].balance
+}
+
+async function getUserBalanceID(userID, serverID) {
+  const { data, error } = await supabase
+  .from('balances')
+  .select()
+  .eq('userID', userID)
+  .eq('serverID', serverID)
+  return data[0].index
 }
 
 async function getUserGlobalStats(userID) {
@@ -1148,12 +1168,45 @@ client.on('interactionCreate', async (interaction) => {
               interaction.member.send('You have successfully requested to join the ' + serverDisplayName + " group!\n\nIf you aren't accepted into the group within a week, your request will expire and you'll have to submit a new join request.").catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you if you are accepted!', ephemeral: true})});
               if (stats.feedChannel !== null && stats.feedChannel !== '') {
                 try {
-                  interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> has requested to join the group! Use '/endorse' if you'd like to give them an endorsement!")
+                  interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> has requested to join the group! Members can use '/endorse' if you'd like to give them an endorsement!")
                 } catch (error) {}
               }
               return
             }
             interaction.editReply({content: 'You have already requested to join this group', ephemeral: true})
+          }
+        } else if (interaction.commandName === 'candidates') {
+          const candidates = await viewCandidates(serverID)
+          let message = 'Current candidates:\n\n'
+          if (candidates.length === 0) {
+            interaction.editReply({content: "There are no current candidates for this group", ephemeral: true})
+          } else {
+            let votesNeeded
+            const numUsers = (await getUsers(serverID)).length
+            for (let i = 0; i < candidates.length; i += 1) {
+              let currentVotes = await getUserEndorsements(candidates[i].userID, serverID)
+              if (numUsers === 2 && currentVotes > 1) {
+                votesNeeded = 1
+              } else {
+                votesNeeded = Math.floor((simpleMajority * numUsers + 1) - currentVotes)
+              }
+              if (votesNeeded > 1) {
+                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsements needed')
+              } else {
+                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsement needed')
+              } 
+              if (await userExists(senderID, serverID)) {
+                if (await alreadyEndorsed(senderID, candidates[i].userID, serverID)) {
+                  message += ' ✅\n'
+                } else {
+                  message += ' ❌\n'
+                }
+              } else {
+                message += '\n'
+              }
+            }
+            message += "\nIf you are a member, use '/endorse' to endorse any of the above candidates!"
+            interaction.editReply({content: message, ephemeral: true})
           }
         } else if (await userExists(senderID, serverID)) {
           if (interaction.commandName === 'balance') {
@@ -1311,35 +1364,6 @@ client.on('interactionCreate', async (interaction) => {
           const numUsers = (await getUsers(serverID)).length
           const serverMoneySupply = roundUp(await moneySupply(serverID))
           interaction.editReply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: __**s**__' + serverMoneySupply + '\nTransaction volume (last 7 days): __**s**__' + roundUp(volume.volume) + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: __**s**__' + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
-        } else if (interaction.commandName === 'candidates') {
-          const candidates = await viewCandidates(serverID)
-          let message = 'Current candidates:\n\n'
-          if (candidates.length === 0) {
-            interaction.editReply({content: "There are no current candidates for this group", ephemeral: true})
-          } else {
-            let votesNeeded
-            const numUsers = (await getUsers(serverID)).length
-            for (let i = 0; i < candidates.length; i += 1) {
-              let currentVotes = await getUserEndorsements(candidates[i].userID, serverID)
-              if (numUsers === 2 && currentVotes > 1) {
-                votesNeeded = 1
-              } else {
-                votesNeeded = Math.ceil((simpleMajority * numUsers) - currentVotes)
-              }
-              if (votesNeeded > 1) {
-                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsements needed')
-              } else {
-                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsement needed')
-              }
-              if (await alreadyEndorsed(senderID, candidates[i].userID, serverID)) {
-                message += ' ✅\n'
-              } else {
-                message += ' ❌\n'
-              }
-            }
-            message += "\nUse '/endorse' to endorse any of the above candidates!"
-            interaction.editReply({content: message, ephemeral: true})
-          }
         } else if (interaction.commandName === 'strike') {
           const receiverID = interaction.options.getUser('user').id
           if (await userExists(receiverID, serverID)) {
@@ -1540,6 +1564,20 @@ client.on('interactionCreate', async (interaction) => {
               }
             }
           }
+        } else if (interaction.commandName === 'withdraw_membership') {
+          const balance = prettyDecimal(await getUserBalance(senderID, serverID))
+          const row = new ActionRowBuilder()
+                  .addComponents(
+                    new ButtonBuilder()
+                      .setCustomId('withdraw_membership')
+                      .setLabel('Withdraw')
+                      .setStyle(ButtonStyle.Danger));
+
+          const embed = new EmbedBuilder()
+                  .setColor(0x0099FF)
+                  .setTitle('Withdraw Membership')
+                  .setDescription('Are you sure you want to withdraw yourself from this group? Your current balance of  __**s**__' + balance + ' will be burned and will not be recoverable.');
+                await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
         }
       } else {
           interaction.editReply({content: "Please request to join the group by typing '/join' if you have not already", ephemeral: true})
@@ -1636,6 +1674,44 @@ client.on('interactionCreate', async (interaction) => {
         interaction.editReply({content: 'This payment has already been redeemed', ephemeral: true})
       }
     }
+  } else if (interaction.customId === 'withdraw_membership') {
+    const serverID = interaction.guildId
+    const senderID = interaction.user.id
+    if (await userExists(senderID, serverID)) { 
+      const stats = await getServerStats(serverID)
+      const serverDisplayName = interaction.guild.name
+      terminateUser(senderID, serverID)
+      await interaction.guild.members.cache.get(senderID).roles.remove(String(stats.generalRoleID)).catch((err) => {console.log(err)});
+      const allEndorsements = await getAllEndorsements(serverID)
+      const numUsers = (await getUsers(serverID)).length
+      if (allEndorsements[0].length >= 1) {
+        for (let i = 0; i < allEndorsements[0].length; i += 1) {
+          if (((allEndorsements[1][i]) > (simpleMajority * numUsers)) || (numUsers === 2 && allEndorsements[1][i] > 1)) {
+            const endorsedUser = await client.users.fetch(allEndorsements[0][i])
+            const endorsedMember = await interaction.guild.members.fetch(endorsedUser.id);
+            try {
+              await endorsedMember.roles.add(String(stats.generalRoleID));
+            }
+            catch (error) {
+              console.log(error)
+              endorsedUser.send('You have been accepted into the ' + serverDisplayName + ' group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
+            }
+            initUser(endorsedUser.id, serverID, stats.income)
+            await clearEndorsements(endorsedUser.id, serverID)
+            clearRequest(endorsedUser.id, serverID)
+            endorsedUser.send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
+            if (stats.feedChannel !== null && stats.feedChannel !== '') {
+              try {
+                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + endorsedUser.id + '> has been accepted into the group!')
+              } catch (error) {}
+            }
+           }
+        }
+      }
+      interaction.editReply({content: "You have been successfully withdrawn from this group. To request to join back in, use the '/join' command", ephemeral: true})
+    } else {
+      interaction.editReply({content: "You aren't a part of this group", ephemeral: true})
+    }
   }
 }
 });
@@ -1665,7 +1741,8 @@ export async function main() {
     RedeemCommand,
     WithdrawCommand,
     MyExchangeCommand,
-    WithdrawFeesCommand
+    WithdrawFeesCommand,
+    WithdrawMembershipCommand
   ];
 
     try {
@@ -1689,6 +1766,6 @@ export async function main() {
 }
 
 main()
-runPayments()
+//runPayments()
 checkCoupons()
 checkRequests()
