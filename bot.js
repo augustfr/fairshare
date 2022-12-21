@@ -1389,20 +1389,24 @@ client.on('interactionCreate', async (interaction) => {
             interaction.editReply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
           }
         } else if (interaction.commandName === 'unendorse') { 
-          const userToUnendorse = interaction.options.getUser('user').id
-          if (await alreadyEndorsed(senderID, userToUnendorse, serverID)) {
-            const currentVotes = await getUserEndorsements(userToUnendorse, serverID)
-            const numEndorsements = await getNumEndorsementsFromUser(senderID, userToUnendorse, serverID)
-            updateEndorsements(userToUnendorse, serverID, currentVotes - numEndorsements)
-            await unendorse(senderID, userToUnendorse, serverID)
-            interaction.editReply({content: 'You have successfully unendorsed <@' + userToUnendorse + '>', ephemeral: true})
-            if (stats.feedChannel !== null && stats.feedChannel !== '') {
-              try {
-                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> unendorsed <@" + userToUnendorse + '>')
-              } catch (error) {}
-            }
+          if (await alreadyDelegated(senderID, serverID)) {
+            interaction.editReply({content: 'You have delegated your endorsing/unendorsing power', ephemeral: true})
           } else {
-            interaction.editReply({content: 'You have not endorsed <@' + userToUnendorse + '>', ephemeral: true})
+            const userToUnendorse = interaction.options.getUser('user').id
+            if (await alreadyEndorsed(senderID, userToUnendorse, serverID)) {
+              const currentVotes = await getUserEndorsements(userToUnendorse, serverID)
+              const numEndorsements = await getNumEndorsementsFromUser(senderID, userToUnendorse, serverID)
+              updateEndorsements(userToUnendorse, serverID, currentVotes - numEndorsements)
+              await unendorse(senderID, userToUnendorse, serverID)
+              interaction.editReply({content: 'You have successfully unendorsed <@' + userToUnendorse + '>', ephemeral: true})
+              if (stats.feedChannel !== null && stats.feedChannel !== '') {
+                try {
+                  interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> unendorsed <@" + userToUnendorse + '>')
+                } catch (error) {}
+              }
+            } else {
+              interaction.editReply({content: 'You have not endorsed <@' + userToUnendorse + '>', ephemeral: true})
+            }
           }
         } else if (interaction.commandName === 'send') {
           const receiverID = interaction.options.getUser('user').id
