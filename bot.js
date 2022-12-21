@@ -28,6 +28,7 @@ import SettingsCommand from './commands/settings.js';
 import MyVoteCommand from './commands/myVote.js';
 import StatsCommand from './commands/stats.js';
 import EndorseCommand from './commands/endorse.js';
+import UnendorseCommand from './commands/unendorse.js';
 import CandidatesCommand from './commands/candidates.js';
 import StrikeCommand from './commands/strike.js';
 import RecentCommand from './commands/recent.js';
@@ -166,6 +167,26 @@ async function getUserEndorsements(userID, serverID) {
   return data[0].votes
 }
 
+async function getNumEndorsementsFromUser(senderID, receiverID, serverID) {
+  const { data, error } = await supabase
+  .from('endorsements')
+  .select()
+  .eq('senderID', senderID)
+  .eq('serverID', serverID)
+  .eq('receiverID', receiverID)
+  const numEndorsements = data.map(a => a.receiverID).length
+  return numEndorsements
+}
+
+async function unendorse(senderID, receiverID, serverID) {
+  const { error } = await supabase
+  .from('endorsements')
+  .delete()
+  .eq('senderID', senderID)
+  .eq('receiverID', receiverID)
+  .eq('serverID', serverID)
+}
+
 async function getAllEndorsements(serverID) {
   const { data, error } = await supabase
   .from('joinRequests')
@@ -176,7 +197,7 @@ async function getAllEndorsements(serverID) {
   return [userIDs, votes]
 }
 
-async function addEndorsement(userID, serverID, updatedCount) {
+async function updateEndorsements(userID, serverID, updatedCount) {
   const { error } = await supabase
   .from('joinRequests')
   .update({votes: updatedCount})
@@ -198,12 +219,9 @@ async function alreadyEndorsed(senderID, receiverID, serverID) {
   .eq('senderID', senderID)
   .eq('receiverID', receiverID)
   .eq('serverID', serverID)
+  .limit(1)
   .single()
-  if(data !== null) {
-    return true;
-  } else {
-    return false;
-  }
+  return data !== null
 }
 
 async function recordEndorsement(senderID, receiverID, serverID) {
@@ -1335,9 +1353,8 @@ client.on('interactionCreate', async (interaction) => {
                 const currentVotes = await getUserEndorsements(receiverID, serverID)
                 const numUsers = (await getUsers(serverID)).length
                 const endorsingPower = await getEndorsingPower(senderID, serverID)
-                console.log(endorsingPower)
                 if (endorsingPower > 0) {
-                  addEndorsement(receiverID, serverID, currentVotes + endorsingPower)
+                  updateEndorsements(receiverID, serverID, currentVotes + endorsingPower)
                   for (let i = 0; i < endorsingPower; i++) {
                     recordEndorsement(senderID, receiverID, serverID)
                   }
@@ -1370,6 +1387,22 @@ client.on('interactionCreate', async (interaction) => {
             }
           } else {
             interaction.editReply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
+          }
+        } else if (interaction.commandName === 'unendorse') { 
+          const userToUnendorse = interaction.options.getUser('user').id
+          if (await alreadyEndorsed(senderID, userToUnendorse, serverID)) {
+            const currentVotes = await getUserEndorsements(userToUnendorse, serverID)
+            const numEndorsements = await getNumEndorsementsFromUser(senderID, userToUnendorse, serverID)
+            updateEndorsements(userToUnendorse, serverID, currentVotes - numEndorsements)
+            await unendorse(senderID, userToUnendorse, serverID)
+            interaction.editReply({content: 'You have successfully unendorsed <@' + userToUnendorse + '>', ephemeral: true})
+            if (stats.feedChannel !== null && stats.feedChannel !== '') {
+              try {
+                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> unendorsed <@" + userToUnendorse + '>')
+              } catch (error) {}
+            }
+          } else {
+            interaction.editReply({content: 'You have not endorsed <@' + userToUnendorse + '>', ephemeral: true})
           }
         } else if (interaction.commandName === 'send') {
           const receiverID = interaction.options.getUser('user').id
@@ -1917,7 +1950,8 @@ export async function main() {
     ExchangeWithdrawFeesCommand,
     WithdrawCommand,
     DelegateCommand,
-    UndelegateCommand
+    UndelegateCommand,
+    UnendorseCommand
   ];
 
     try {
