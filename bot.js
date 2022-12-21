@@ -359,12 +359,9 @@ async function userExists(userID, serverID) {
   .select('serverID')
   .eq('userID', userID)
   .eq('serverID', serverID)
+  .limit(1)
   .single()
-  if(data !== null) {
-    return true;
-  } else {
-    return false;
-  }
+  return data !== null
 }
 
 async function alreadyDelegated(delegator, serverID) {
@@ -1410,6 +1407,7 @@ client.on('interactionCreate', async (interaction) => {
           }
         } else if (interaction.commandName === 'send') {
           const receiverID = interaction.options.getUser('user').id
+          console.log(await userExists(interaction.options.getUser('user').id, serverID))
           if (await userExists(senderID, serverID) && await userExists(receiverID, serverID)) {
             const senderCurrentBalance = await getUserBalance(senderID, serverID)
             const receiverCurrentBalance = await getUserBalance(receiverID, serverID)
@@ -1738,7 +1736,7 @@ client.on('interactionCreate', async (interaction) => {
                   .setDescription('Are you sure you want to withdraw yourself from this group? Your current balance of  __**s**__' + balance + ' will be burned and will not be recoverable.');
                 await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
         } else if (interaction.commandName === 'delegate_endorsements') {
-          if (await userExists(interaction.options.getUser('user').id)) {
+          if (await userExists(interaction.options.getUser('user').id, serverID)) {
             if (interaction.options.getUser('user').id === senderID) {
               interaction.editReply({content: "Can't delegate to yourself", ephemeral: true})
             } else {
