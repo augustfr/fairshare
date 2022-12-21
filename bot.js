@@ -39,10 +39,35 @@ import RedeemCommand from './commands/redeem.js';
 import ExchangeWithdrawCommand from './commands/exchangeWithdraw.js';
 import MyExchangeCommand from './commands/myExchange.js';
 import ExchangeWithdrawFeesCommand from './commands/exchangeWithdrawFees.js';
-import WithdrawCommand from './commands/withdraw.js'
-
+import WithdrawCommand from './commands/withdraw.js';
+import DelegateCommand from './commands/delegate.js';
+import UndelegateCommand from './commands/undelegate.js';
 
 config();
+
+class Mutex {
+  constructor() {
+    this.lock = Promise.resolve();
+    this.queue = [];
+  }
+  async acquire() {
+    let resolver;
+    const newLock = new Promise(resolve => resolver = resolve);
+
+    this.queue.push(resolver);
+
+    await this.lock;
+
+    this.lock = newLock;
+
+    return () => {
+      this.lock = Promise.resolve();
+      if (this.queue.length > 0) {
+        this.queue.shift()();
+      }
+    };
+  }
+}
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.APP_ID;
@@ -157,6 +182,13 @@ async function addEndorsement(userID, serverID, updatedCount) {
   .update({votes: updatedCount})
   .eq('userID', userID)
   .eq('serverID', serverID)
+}
+
+async function addEndorsementDelegation(delegator, delegatee, serverID) {
+  const currentDate = new Date();
+  const { error } = await supabase
+  .from('endorsementDelegations')
+  .insert({ created_at: currentDate, delegatorID: delegator, delegateeID: delegatee, serverID: serverID})
 }
 
 async function alreadyEndorsed(senderID, receiverID, serverID) {
@@ -317,6 +349,20 @@ async function userExists(userID, serverID) {
   }
 }
 
+async function alreadyDelegated(delegator, serverID) {
+  const {data} = await supabase
+  .from('endorsementDelegations')
+  .select('serverID')
+  .eq('delegatorID', delegator)
+  .eq('serverID', serverID)
+  .single()
+  if(data !== null) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 async function hasRequested(userID, serverID) {
   const {data} = await supabase
   .from('joinRequests')
@@ -367,13 +413,30 @@ export async function getUserBalance(userID, serverID) {
   return data[0].balance
 }
 
-async function getUserBalanceID(userID, serverID) {
+async function getEndorsingPower(userID, serverID) {
   const { data, error } = await supabase
   .from('balances')
-  .select()
+  .select('endorsingPower')
   .eq('userID', userID)
   .eq('serverID', serverID)
-  return data[0].index
+  return data[0].endorsingPower
+}
+
+async function getDelegatee(delegator, serverID) {
+  const { data, error } = await supabase
+  .from('endorsementDelegations')
+  .select('delegateeID')
+  .eq('delegatorID', delegator)
+  .eq('serverID', serverID)
+  return data[0].delegateeID
+}
+
+async function clearEndorsementDelegation(delegator, serverID) {
+  const { error } = await supabase 
+  .from('endorsementDelegations')
+  .delete()
+  .eq('delegatorID', delegator)
+  .eq('serverID', serverID)
 }
 
 async function getUserGlobalStats(userID) {
@@ -468,6 +531,14 @@ export async function updateBalance(userID, serverID, newAmount) {
   const { error } = await supabase
   .from('balances')
   .update({balance: newAmount})
+  .eq('userID', userID)
+  .eq('serverID', serverID)
+}
+
+async function updateEndorsementPower(userID, serverID, newAmount) {
+  const { error } = await supabase
+  .from('balances')
+  .update({endorsingPower: newAmount})
   .eq('userID', userID)
   .eq('serverID', serverID)
 }
@@ -757,6 +828,44 @@ function generateUID() {
   secondPart = ("000" + secondPart.toString(36)).slice(-3);
   return firstPart + secondPart;
 }
+
+async function updateEndorsingPowers(serverID) {
+  const release = await mutex.acquire();
+  try {
+    const users = await getUsers(serverID)
+    for (let i = 0; i < users.length; i++) {
+      await updateEndorsementPower(users[i], serverID, 1)
+    }
+    for (let i = 0; i < users.length; i++) {
+      let userHasDelegated = await alreadyDelegated(users[i], serverID)
+      if (userHasDelegated) {
+        let delegator = users[i]
+        let count = 0
+        while (userHasDelegated) {
+          let newDelegatee = await getDelegatee(delegator, serverID)
+          delegator = newDelegatee
+          if (!(await alreadyDelegated(delegator, serverID))){
+            userHasDelegated = false
+          }
+          if (count > users.length) {
+            userHasDelegated = false
+            return false
+          }
+          count++
+        }
+        let currentPower = await getEndorsingPower(delegator, serverID)
+        await updateEndorsementPower(delegator, serverID, currentPower + 1)
+        await updateEndorsementPower(users[i], serverID, 0)
+      }
+    }
+    return true
+  } finally {
+    release();
+  }
+}
+
+const mutex = new Mutex(); // create a mutex object
+
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
@@ -1225,31 +1334,39 @@ client.on('interactionCreate', async (interaction) => {
               } else {
                 const currentVotes = await getUserEndorsements(receiverID, serverID)
                 const numUsers = (await getUsers(serverID)).length
-                addEndorsement(receiverID, serverID, currentVotes + 1)
-                recordEndorsement(senderID, receiverID, serverID)
-                interaction.editReply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
-                if (stats.feedChannel !== null && stats.feedChannel !== '') {
-                  try {
-                    interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> endorsed <@" + receiverID + '>')
-                  } catch (error) {}
-                }
-                if (((currentVotes + 1) > (simpleMajority * numUsers)) || (numUsers === 2 && currentVotes > 1)) {
-                  try {
-                    await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.add(String(stats.generalRoleID)).catch((err) => {console.log(err)});
+                const endorsingPower = await getEndorsingPower(senderID, serverID)
+                console.log(endorsingPower)
+                if (endorsingPower > 0) {
+                  addEndorsement(receiverID, serverID, currentVotes + endorsingPower)
+                  for (let i = 0; i < endorsingPower; i++) {
+                    recordEndorsement(senderID, receiverID, serverID)
                   }
-                  catch (error) {
-                    interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
-                  }
-                  initUser(receiverID, serverID, stats.income)
-                  await clearEndorsements(receiverID, serverID)
-                  clearRequest(receiverID, serverID)
-                  interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
+                  interaction.editReply({content: 'Thank you for your endorsement of <@' + receiverID + '>!', ephemeral: true})
                   if (stats.feedChannel !== null && stats.feedChannel !== '') {
                     try {
-                      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the group!')
+                      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> endorsed <@" + receiverID + '>')
                     } catch (error) {}
                   }
-                } 
+                  if (((currentVotes + endorsingPower) > (simpleMajority * numUsers)) || (numUsers === 2 && currentVotes > 1)) {
+                    try {
+                      await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.add(String(stats.generalRoleID)).catch((err) => {console.log(err)});
+                    }
+                    catch (error) {
+                      interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
+                    }
+                    initUser(receiverID, serverID, stats.income)
+                    await clearEndorsements(receiverID, serverID)
+                    clearRequest(receiverID, serverID)
+                    interaction.options.getUser('user').send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
+                    if (stats.feedChannel !== null && stats.feedChannel !== '') {
+                      try {
+                        interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + receiverID + '> has been accepted into the group!')
+                      } catch (error) {}
+                    }
+                  } 
+                } else {
+                  interaction.editReply({content: "You currently have no endorsing power. Use the '/undelegate_endorsements' command to regain your power", ephemeral: true})
+                }
             }
           } else {
             interaction.editReply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
@@ -1583,6 +1700,51 @@ client.on('interactionCreate', async (interaction) => {
                   .setTitle('Withdraw From Group')
                   .setDescription('Are you sure you want to withdraw yourself from this group? Your current balance of  __**s**__' + balance + ' will be burned and will not be recoverable.');
                 await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
+        } else if (interaction.commandName === 'delegate_endorsements') {
+          if (interaction.options.getUser('user').id === senderID) {
+            interaction.editReply({content: "Can't delegate to yourself", ephemeral: true})
+          } else {
+            if (!(await alreadyDelegated(senderID, serverID))) {
+              let delegatee = interaction.options.getUser('user').id
+              let delegateeHasDelegated = await alreadyDelegated(delegatee, serverID)
+              let error = false
+              while (delegateeHasDelegated) {
+                let newDelegatee = await getDelegatee(delegatee, serverID)
+                if (newDelegatee === senderID) {
+                  interaction.editReply({content: "Unable to delegate your voting power to <@" + interaction.options.getUser('user').id + '>', ephemeral: true})
+                  error = true
+                  break
+                } else {
+                  delegatee = newDelegatee
+                  if (!(await alreadyDelegated(delegatee, serverID))){
+                    delegateeHasDelegated = false
+                  }
+                }
+              }
+              if (!error) {
+                await addEndorsementDelegation(senderID, interaction.options.getUser('user').id, serverID)
+                if (await updateEndorsingPowers(serverID)) {
+                  interaction.editReply({content: "You have successfully delegated your endorsing power to <@" + interaction.options.getUser('user').id + ">. Revoke this power by using the '/undelegate_endorsements' command", ephemeral: true})
+                } else {
+                  interaction.editReply({content: "Unable to delegate your voting power to <@" + interaction.options.getUser('user').id + '>. Please let a server admin know', ephemeral: true})
+                }
+              }
+            } else {
+              let delegatee = await getDelegatee(senderID, serverID)
+              interaction.editReply({content: "You have already delegated your endorsing power to <@" + delegatee + ">. Use the '/undelegate_endorsements' and then try again.", ephemeral: true})
+            }
+          }
+        } else if (interaction.commandName === 'undelegate_endorsements') {
+          if (await alreadyDelegated(senderID, serverID)) {
+            await clearEndorsementDelegation(senderID, serverID)
+            if (await updateEndorsingPowers(serverID)) {
+              interaction.editReply({content: "You have undelegated your endorsement power", ephemeral: true})
+            } else {
+              interaction.editReply({content: "Unable to undelegate your voting power. Please let a server admin know", ephemeral: true})
+            }
+          } else {
+            interaction.editReply({content: "You haven't delegated your endorsement power to any other user. Use the '/delegate_endorsements' if you'd like to delegate.", ephemeral: true})
+          }
         }
       } else {
           interaction.editReply({content: "Please request to join the group by typing '/join' if you have not already", ephemeral: true})
@@ -1749,7 +1911,9 @@ export async function main() {
     ExchangeWithdrawCommand,
     MyExchangeCommand,
     ExchangeWithdrawFeesCommand,
-    WithdrawCommand
+    WithdrawCommand,
+    DelegateCommand,
+    UndelegateCommand
   ];
 
     try {
