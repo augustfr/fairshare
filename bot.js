@@ -1701,38 +1701,42 @@ client.on('interactionCreate', async (interaction) => {
                   .setDescription('Are you sure you want to withdraw yourself from this group? Your current balance of  __**s**__' + balance + ' will be burned and will not be recoverable.');
                 await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
         } else if (interaction.commandName === 'delegate_endorsements') {
-          if (interaction.options.getUser('user').id === senderID) {
-            interaction.editReply({content: "Can't delegate to yourself", ephemeral: true})
-          } else {
-            if (!(await alreadyDelegated(senderID, serverID))) {
-              let delegatee = interaction.options.getUser('user').id
-              let delegateeHasDelegated = await alreadyDelegated(delegatee, serverID)
-              let error = false
-              while (delegateeHasDelegated) {
-                let newDelegatee = await getDelegatee(delegatee, serverID)
-                if (newDelegatee === senderID) {
-                  interaction.editReply({content: "Unable to delegate your voting power to <@" + interaction.options.getUser('user').id + '>', ephemeral: true})
-                  error = true
-                  break
-                } else {
-                  delegatee = newDelegatee
-                  if (!(await alreadyDelegated(delegatee, serverID))){
-                    delegateeHasDelegated = false
+          if (await userExists(interaction.options.getUser('user').id)) {
+            if (interaction.options.getUser('user').id === senderID) {
+              interaction.editReply({content: "Can't delegate to yourself", ephemeral: true})
+            } else {
+              if (!(await alreadyDelegated(senderID, serverID))) {
+                let delegatee = interaction.options.getUser('user').id
+                let delegateeHasDelegated = await alreadyDelegated(delegatee, serverID)
+                let error = false
+                while (delegateeHasDelegated) {
+                  let newDelegatee = await getDelegatee(delegatee, serverID)
+                  if (newDelegatee === senderID) {
+                    interaction.editReply({content: "Unable to delegate your voting power to <@" + interaction.options.getUser('user').id + '>', ephemeral: true})
+                    error = true
+                    break
+                  } else {
+                    delegatee = newDelegatee
+                    if (!(await alreadyDelegated(delegatee, serverID))){
+                      delegateeHasDelegated = false
+                    }
                   }
                 }
-              }
-              if (!error) {
-                await addEndorsementDelegation(senderID, interaction.options.getUser('user').id, serverID)
-                if (await updateEndorsingPowers(serverID)) {
-                  interaction.editReply({content: "You have successfully delegated your endorsing power to <@" + interaction.options.getUser('user').id + ">. Revoke this power by using the '/undelegate_endorsements' command", ephemeral: true})
-                } else {
-                  interaction.editReply({content: "Unable to delegate your voting power to <@" + interaction.options.getUser('user').id + '>. Please let a server admin know', ephemeral: true})
+                if (!error) {
+                  await addEndorsementDelegation(senderID, interaction.options.getUser('user').id, serverID)
+                  if (await updateEndorsingPowers(serverID)) {
+                    interaction.editReply({content: "You have successfully delegated your endorsing power to <@" + interaction.options.getUser('user').id + ">. Revoke this power by using the '/undelegate_endorsements' command", ephemeral: true})
+                  } else {
+                    interaction.editReply({content: "Unable to delegate your voting power to <@" + interaction.options.getUser('user').id + '>. Please let a server admin know', ephemeral: true})
+                  }
                 }
+              } else {
+                let delegatee = await getDelegatee(senderID, serverID)
+                interaction.editReply({content: "You have already delegated your endorsing power to <@" + interaction.options.getUser('user').id + ">. Use the '/undelegate_endorsements' and then try again.", ephemeral: true})
               }
-            } else {
-              let delegatee = await getDelegatee(senderID, serverID)
-              interaction.editReply({content: "You have already delegated your endorsing power to <@" + delegatee + ">. Use the '/undelegate_endorsements' and then try again.", ephemeral: true})
             }
+          } else {
+            interaction.editReply({content: "<@" + interaction.options.getUser('user').id + "> is not a member of this group.", ephemeral: true})
           }
         } else if (interaction.commandName === 'undelegate_endorsements') {
           if (await alreadyDelegated(senderID, serverID)) {
