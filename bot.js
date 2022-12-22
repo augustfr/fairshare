@@ -151,11 +151,20 @@ async function computeGiniIndex(serverID) {
   return sumOfDifferences/(2 * num * num * averageBalance)
 }
 
-async function requestToJoin(userID, serverID) {
+async function requestToJoin(userID, serverID, votesNeeded) {
   const currentDate = new Date();
   const { error } = await supabase
   .from('joinRequests')
-  .insert({ userID: userID, serverID: serverID, requestDate: currentDate})
+  .insert({ userID: userID, serverID: serverID, requestDate: currentDate, votesNeeded: votesNeeded })
+}
+
+async function votesNeeded(userID, serverID) {
+  const { data, error } = await supabase
+  .from('joinRequests')
+  .select('votesNeeded')
+  .eq('serverID', serverID)
+  .eq('userID', userID)
+  return data[0].votesNeeded
 }
 
 async function getUserEndorsements(userID, serverID) {
@@ -1288,7 +1297,8 @@ client.on('interactionCreate', async (interaction) => {
             try {
               const currentVotes = await getUserEndorsements(senderID, serverID)
             } catch (error) {
-              requestToJoin(senderID, serverID)
+              const numUsers = (await getUsers(serverID)).length
+              requestToJoin(senderID, serverID, Math.floor((numUsers * simpleMajority) + 1))
               interaction.editReply({content: 'You have successfully requested to join the ' + serverDisplayName + " group!\n\nIf you aren't accepted into the group within a week, your request will expire and you'll have to submit a new join request.", ephemeral: true})
               interaction.member.send('You have successfully requested to join the ' + serverDisplayName + " group!\n\nIf you aren't accepted into the group within a week, your request will expire and you'll have to submit a new join request.").catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you if you are accepted!', ephemeral: true})});
               if (stats.feedChannel !== null && stats.feedChannel !== '') {
@@ -1310,19 +1320,19 @@ client.on('interactionCreate', async (interaction) => {
             if (await userExists(senderID, serverID)) { 
               exists = true
             }
-            let votesNeeded
+            let endorsementsNeeded
             const numUsers = (await getUsers(serverID)).length
             for (let i = 0; i < candidates.length; i += 1) {
               let currentVotes = await getUserEndorsements(candidates[i].userID, serverID)
               if (numUsers === 2 && currentVotes > 1) {
-                votesNeeded = 1
+                endorsementsNeeded = 1
               } else {
-                votesNeeded = Math.floor((simpleMajority * numUsers + 1) - currentVotes)
+                endorsementsNeeded = (await votesNeeded(candidates[i].userID, serverID)) - currentVotes
               }
-              if (votesNeeded > 1) {
-                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsements needed')
+              if (endorsementsNeeded > 1) {
+                message += ('<@' + candidates[i].userID + '>, ' + endorsementsNeeded + ' endorsements needed')
               } else {
-                message += ('<@' + candidates[i].userID + '>, ' + votesNeeded + ' endorsement needed')
+                message += ('<@' + candidates[i].userID + '>, ' + endorsementsNeeded + ' endorsement needed')
               } 
               if (exists) {
                 if (await alreadyEndorsed(senderID, candidates[i].userID, serverID)) {
@@ -1361,7 +1371,8 @@ client.on('interactionCreate', async (interaction) => {
                       interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> endorsed <@" + receiverID + '>')
                     } catch (error) {}
                   }
-                  if (((currentVotes + endorsingPower) > (simpleMajority * numUsers)) || (numUsers === 2 && currentVotes > 1)) {
+                  let endorsementsNeeded = await votesNeeded(receiverID, serverID)
+                  if ((currentVotes + 1 >= endorsementsNeeded) || (numUsers === 2 && currentVotes > 1)) {
                     try {
                       await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.add(String(stats.generalRoleID)).catch((err) => {console.log(err)});
                     }
@@ -1894,7 +1905,8 @@ client.on('interactionCreate', async (interaction) => {
       const numUsers = (await getUsers(serverID)).length
       if (allEndorsements[0].length >= 1) {
         for (let i = 0; i < allEndorsements[0].length; i += 1) {
-          if (((allEndorsements[1][i]) > (simpleMajority * numUsers)) || (numUsers === 2 && allEndorsements[1][i] > 1)) {
+          let endorsementsNeeded = await votesNeeded(allEndorsements[0][i], serverID)
+          if (((allEndorsements[1][i]) >= endorsementsNeeded) || (numUsers === 2 && allEndorsements[1][i] > 1)) {
             const endorsedUser = await client.users.fetch(allEndorsements[0][i])
             const endorsedMember = await interaction.guild.members.fetch(endorsedUser.id);
             try {
