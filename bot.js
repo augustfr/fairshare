@@ -845,6 +845,23 @@ function prettyDecimal(number) {
   return parseFloat(number)
 }
 
+function formatCurrency(num, symbol = '__**s**__') {
+  // Convert the number to a string with two fixed decimal places
+  num = num.toFixed(2);
+  // Split the string by the decimal point
+  let [integer, decimal] = num.split('.');
+  // Use a regular expression to insert commas every three digits in the integer part
+  integer = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  // If the decimal part is zero, omit it from the formatted string
+  if (decimal === '00') {
+    return symbol + integer;
+  }
+  // Otherwise, return the formatted string with the currency symbol and the decimal part
+  return symbol + integer + '.' + decimal;
+}
+
+
+
 function generateUID() {
   var firstPart = (Math.random() * 46656) | 0;
   var secondPart = (Math.random() * 46656) | 0;
@@ -933,9 +950,9 @@ client.on('interactionCreate', async (interaction) => {
                 } else {
                   const stats = await getServerStats(coupon[0].serverID)
                   const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
-                  const amount = prettyDecimal(coupon[0].amount / bestRoute.rate)
-                  const fee = prettyDecimal((amount * (stats.fee / 100)))
-                  const redeemable = amount - fee
+                  const amount = coupon[0].amount / bestRoute.rate
+                  const fee = amount * (stats.fee / 100)
+                  const redeemable = formatCurrency(amount - fee, '')
                   const redeemLog = await getRedeemLogByCoupon(coupon[0].coupon)
                   let redeemID
                   if (redeemLog.length > 0) {
@@ -1003,7 +1020,7 @@ client.on('interactionCreate', async (interaction) => {
                 if (prettyDecimal(userExchanges[i].rate) === prettyDecimal(1 / foreignExchange[0].rate)) {
                   status = 'Active'
                 }
-                message += 'Exchange ID: ' + userExchanges[i].id + '\nTotal balance: ' + prettyDecimal(userExchanges[i].balance) + ' ' + name + ' shares' + '\nFunding from you: ' + prettyDecimal(userExchanges[i].fundsFromUser) + ' ' + name + ' shares' + '\nFees earned: ' + prettyDecimal(userExchanges[i].feesEarned) + ' ' + name + ' shares' +  '\nExchanges with: ' + foreignExchangeDisplayName + '\nForeign balance: ' + prettyDecimal(foreignExchange[0].balance) + ' ' + foreignExchangeName + ' shares' + '\nRate: ' + userExchanges[i].rate + ':1' + '\nStatus: ' + status + '\n\n'
+                message += 'Exchange ID: ' + userExchanges[i].id + '\nTotal balance: ' + formatCurrency(userExchanges[i].balance, '') + ' ' + name + ' shares' + '\nFunding from you: ' + formatCurrency(userExchanges[i].fundsFromUser, '') + ' ' + name + ' shares' + '\nFees earned: ' + formatCurrency(userExchanges[i].feesEarned, '') + ' ' + name + ' shares' +  '\nExchanges with: ' + foreignExchangeDisplayName + '\nForeign balance: ' + formatCurrency(foreignExchange[0].balance, '') + ' ' + foreignExchangeName + ' shares' + '\nRate: ' + userExchanges[i].rate + ':1' + '\nStatus: ' + status + '\n\n'
               }
             } 
           } else {
@@ -1022,17 +1039,17 @@ client.on('interactionCreate', async (interaction) => {
         const userExchanges = await getExchangeByID(interaction.options.getInteger('exchange_id'))
         if (userExchanges.length > 0) {
           if (userExchanges[0].userID === senderID) {
-            const currentExchangeBalance = prettyDecimal(userExchanges[0].balance)
-            const fundedByUser = prettyDecimal(userExchanges[0].fundsFromUser)
+            const currentExchangeBalance = userExchanges[0].balance
+            const fundedByUser = userExchanges[0].fundsFromUser
             const amount = interaction.options.getNumber('amount')
             const currentUserBalance = await getUserBalance(senderID, userExchanges[0].serverID)
             const exchangeName = (await getServerStats(userExchanges[0].serverID)).name
             if ((fundedByUser >= amount) && (currentExchangeBalance >= amount)) {
               updateBalance(senderID, userExchanges[0].serverID, currentUserBalance + amount)
               updateExchange(userExchanges[0].id, currentExchangeBalance - amount, userExchanges[0].rate, fundedByUser - amount)
-              interaction.editReply({content: prettyDecimal(amount) + ' ' + exchangeName + ' shares have been successfully withdrawn. The balance of this exchange is now ' + prettyDecimal(currentExchangeBalance - amount) + ' ' + exchangeName + ' shares with ' + prettyDecimal(fundedByUser - amount) + ' ' + exchangeName + ' shares provided by you', ephemeral: true})
+              interaction.editReply({content: formatCurrency(amount, '') + ' ' + exchangeName + ' shares have been successfully withdrawn. The balance of this exchange is now ' + formatCurrency(currentExchangeBalance - amount, '') + ' ' + exchangeName + ' shares with ' + formatCurrency(fundedByUser - amount, '') + ' ' + exchangeName + ' shares provided by you', ephemeral: true})
             } else {
-              interaction.editReply({content: 'The balance of this exchange is ' + prettyDecimal(currentExchangeBalance) + ' ' + exchangeName + ' shares with ' + prettyDecimal(fundedByUser) + ' ' + exchangeName + ' shares provided by you.\n\nUnable to withdraw', ephemeral: true})
+              interaction.editReply({content: 'The balance of this exchange is ' + formatCurrency(currentExchangeBalance, '') + ' ' + exchangeName + ' shares with ' + formatCurrency(fundedByUser, '') + ' ' + exchangeName + ' shares provided by you.\n\nUnable to withdraw', ephemeral: true})
             }
           } else {
             interaction.editReply({content: 'You are not a part of this exchange', ephemeral: true})
@@ -1048,12 +1065,12 @@ client.on('interactionCreate', async (interaction) => {
         const userExchanges = await getExchangeByID(interaction.options.getInteger('exchange_id'))
         if (userExchanges.length > 0) {
           if (userExchanges[0].userID === senderID) {
-            const currentExchangeFeeBalance = prettyDecimal(userExchanges[0].feesEarned)
+            const currentExchangeFeeBalance = userExchanges[0].feesEarned
             const currentUserBalance = await getUserBalance(senderID, userExchanges[0].serverID)
             const exchangeName = (await getServerStats(userExchanges[0].serverID)).name
             updateBalance(senderID, userExchanges[0].serverID, currentUserBalance + currentExchangeFeeBalance)
             updateExchangeFees(userExchanges[0].id, 0)
-            interaction.editReply({content: currentExchangeFeeBalance + ' ' + exchangeName + ' shares have been successfully withdrawn!', ephemeral: true})
+            interaction.editReply({content: formatCurrency(currentExchangeFeeBalance, '') + ' ' + exchangeName + ' shares have been successfully withdrawn!', ephemeral: true})
           } else {
             interaction.editReply({content: 'You are not a part of this exchange', ephemeral: true})
           }
@@ -1067,12 +1084,12 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.options.getNumber('rate') === null && interaction.options.getNumber('amount') === null) {
         interaction.editReply({content: "Please enter either an amount, and/or a rate", ephemeral: true})
       } else {
-        let amount = prettyDecimal(interaction.options.getNumber('amount'))
+        let amount = interaction.options.getNumber('amount')
         const exchangeName = (await getServerStats(exchange[0].serverID)).name
           if (exchange.length > 0) {
             if (exchange[0].userID === senderID) {
               if (await userExists(senderID, exchange[0].serverID)) {
-                const balance = prettyDecimal(await getUserBalance(senderID, exchange[0].serverID))
+                const balance = await getUserBalance(senderID, exchange[0].serverID)
                 if (interaction.options.getNumber('amount') === null) {
                   amount = 0
                 }
@@ -1085,7 +1102,7 @@ client.on('interactionCreate', async (interaction) => {
                     const foreignUser = await client.users.fetch(foreignExchange[0].userID)
                     const foreignServer = await getServerStats(foreignExchange[0].serverID)
                     const server = await getServerStats(exchange[0].serverID)
-                    if (interaction.options.getNumber('rate') !== prettyDecimal(1 / foreignExchange[0].rate)) {
+                    if (rate !== prettyDecimal(1 / foreignExchange[0].rate)) {
                       try {
                         foreignUser.send('<@' + interaction.user.id + '> has changed the rate on their side of the exchange to ' + rate + ':1. In order for this to be a valid exchange pair, your side of the exchange would need to have the rate set to ' + prettyDecimal(1 / rate) + ". In order to do this, run the '/exchange_update' command and enter " + foreignExchange[0].id + ' as the exchangeID')
                       } catch (error) {
@@ -1117,7 +1134,7 @@ client.on('interactionCreate', async (interaction) => {
                   updateBalance(senderID, exchange[0].serverID, balance - amount)
                   interaction.editReply({content: "The exchange (ID: " + exchange[0].id + ") has been successfully updated! Please run the '/my_exchanges' command to view the details of the exchange", ephemeral: true})
                 } else {
-                  interaction.editReply({content: 'You currently have ' + balance + ' ' + exchangeName + ' shares, but ' + amount + ' ' + exchangeName + ' shares are needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
+                  interaction.editReply({content: 'You currently have ' + formatCurrency(balance, '') + ' ' + exchangeName + ' shares, but ' + formatCurrency(amount, '') + ' ' + exchangeName + ' shares are needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
                 }
               } else {
                 interaction.editReply({content: "You are not a member of the group being exchanged into!", ephemeral: true})
@@ -1152,7 +1169,7 @@ client.on('interactionCreate', async (interaction) => {
                     serverExists = false
                   } 
                   if (serverExists) {
-                    message += (globalUserStats[i].balance + ' ' + name + ' shares in ' + serverDisplayName + '\n')
+                    message += (formatCurrency(globalUserStats[i].balance, '') + ' ' + name + ' shares in ' + serverDisplayName + '\n')
                   } else {
                     message += ('Deleted server\n')
                   }
@@ -1189,18 +1206,18 @@ client.on('interactionCreate', async (interaction) => {
                     sentMessage = 'Sent:\n'
                     for (let i = 0; i < sent.length; i += 1) {
                       if (sent[i].message !== null) {
-                        sentMessage += (sent[i].amount + ' ' + name + ' shares to' + ' <@' + sent[i].userID + '> for ' + sent[i].message + '\n')
+                        sentMessage += (formatCurrency(sent[i].amount, '') + ' ' + name + ' shares to' + ' <@' + sent[i].userID + '> for ' + sent[i].message + '\n')
                       } else {
-                        sentMessage += (sent[i].amount + ' ' + name + ' shares to' + ' <@' + sent[i].userID + '>\n')
+                        sentMessage += (formatCurrency(sent[i].amount, '') + ' ' + name + ' shares to' + ' <@' + sent[i].userID + '>\n')
                       }
                     }
                     sentMessage += '\n'
                     receivedMessage = 'Received:\n'
                     for (let i = 0; i < received.length; i += 1) {
                       if (received[i].message !== null) {
-                        receivedMessage += (received[i].amount + ' ' + name + ' shares from' + ' <@' + received[i].userID + '> for ' + received[i].message + '\n')
+                        receivedMessage += (formatCurrency(received[i].amount, '') + ' ' + name + ' shares from' + ' <@' + received[i].userID + '> for ' + received[i].message + '\n')
                       } else {
-                        receivedMessage += (received[i].amount + ' ' + name + ' shares from' + ' <@' + received[i].userID + '>\n')
+                        receivedMessage += (formatCurrency(received[i].amount, '') + ' ' + name + ' shares from' + ' <@' + received[i].userID + '>\n')
                       }
                     }
                     receivedMessage += '\n'
@@ -1217,9 +1234,9 @@ client.on('interactionCreate', async (interaction) => {
                       for (let i = 0; i < sentExt.length; i += 1) {
                         const serverDisplayName = (await client.guilds.fetch(sentExt[i].receiverServerID)).name
                         if (sentExt[i].message !== null) {
-                          sentExtMessage += (sentExt[i].amount + ' ' + name + ' shares to ' + serverDisplayName + ' for ' + sentExt[i].message + '\n')
+                          sentExtMessage += (formatCurrency(sentExt[i].amount, '') + ' ' + name + ' shares to ' + serverDisplayName + ' for ' + sentExt[i].message + '\n')
                         } else {
-                          sentExtMessage += (sentExt[i].amount + ' ' + name + ' shares to ' + serverDisplayName + '\n')
+                          sentExtMessage += (formatCurrency(sentExt[i].amount, '') + ' ' + name + ' shares to ' + serverDisplayName + '\n')
                         }
                       }
                       sentExtMessage += '\n'
@@ -1230,9 +1247,9 @@ client.on('interactionCreate', async (interaction) => {
                         const serverDisplayName = (await client.guilds.fetch(receivedExt[i].originServerID)).name
                         const remittance = await getRemittanceByCoupon(receivedExt[i].coupon)
                         if (remittance[0].message !== null) {
-                          receivedExtMessage += (receivedExt[i].amount + ' ' + name + ' shares from ' + serverDisplayName + ' for ' + remittance[0].message + '\n')
+                          receivedExtMessage += (formatCurrency(receivedExt[i].amount, '') + ' ' + name + ' shares from ' + serverDisplayName + ' for ' + remittance[0].message + '\n')
                         } else {
-                          receivedExtMessage += (receivedExt[i].amount + ' ' + name + ' shares from ' + serverDisplayName + '\n')
+                          receivedExtMessage += (formatCurrency(receivedExt[i].amount, '') + ' ' + name + ' shares from ' + serverDisplayName + '\n')
                         }
                       }
                       receivedExtMessage += '\n'
@@ -1349,8 +1366,8 @@ client.on('interactionCreate', async (interaction) => {
           }
         } else if (await userExists(senderID, serverID)) {
           if (interaction.commandName === 'balance') {
-            const balance = await getUserBalance(senderID, serverID)
-            interaction.editReply({content: 'Your current balance: __**s**__' + balance, ephemeral: true})
+            const balance = formatCurrency(await getUserBalance(senderID, serverID))
+            interaction.editReply({content: 'Your current balance: ' + balance, ephemeral: true})
           } else if (interaction.commandName === 'endorse') {
             const receiverID = interaction.options.getUser('user').id
             if (await hasRequested(receiverID, serverID)) {
@@ -1418,21 +1435,20 @@ client.on('interactionCreate', async (interaction) => {
           }
         } else if (interaction.commandName === 'send') {
           const receiverID = interaction.options.getUser('user').id
-          console.log(await userExists(interaction.options.getUser('user').id, serverID))
           if (await userExists(senderID, serverID) && await userExists(receiverID, serverID)) {
             const senderCurrentBalance = await getUserBalance(senderID, serverID)
             const receiverCurrentBalance = await getUserBalance(receiverID, serverID)
-            const amount = prettyDecimal(interaction.options.getNumber('amount'))
-            const fee = prettyDecimal((amount * (stats.fee / 100)))
-            const amountWithFee = prettyDecimal((amount + fee))
+            const amount = interaction.options.getNumber('amount')
+            const fee = (amount * (stats.fee / 100))
+            const amountWithFee = amount + fee
             if (senderCurrentBalance - amountWithFee < 0) {
-              interaction.editReply({content: 'You currently have __**s**__' + senderCurrentBalance + ', but  __**s**__' + amountWithFee + ' are needed to send  __**s**__' + amount + ' with a ' + stats.fee + '% transaction fee.', ephemeral: true})
+              interaction.editReply({content: 'You currently have ' + formatCurrency(senderCurrentBalance) + ', but ' + formatCurrency(amountWithFee) + ' are needed to send ' + formatCurrency(amount) + ' with a ' + stats.fee + '% transaction fee.', ephemeral: true})
             } else {
                 updateBalance(senderID, serverID, senderCurrentBalance - amountWithFee)
                 updateBalance(receiverID, serverID, receiverCurrentBalance + amount)
                 transactionLog(serverID, senderID, receiverID, amount, fee, interaction.options.getString('message'))
-                await interaction.editReply({content: 'Sent __**s**__' + amount + ' to <@' + receiverID + '>, and a __**s**__' + fee + ' transaction fee was taken, totalling to __**s**__' + amountWithFee, ephemeral: true})
-                interaction.options.getUser('user').send('<@' + senderID + '> has sent you ' + amount + ' ' + name + ' shares in the ' + serverDisplayName + ' group').catch((err) => {
+                await interaction.editReply({content: 'Sent ' + formatCurrency(amount) + ' to <@' + receiverID + '>, and a ' + formatCurrency(fee) + ' transaction fee was taken, totalling to ' + formatCurrency(amountWithFee), ephemeral: true})
+                interaction.options.getUser('user').send('<@' + senderID + '> has sent you ' + formatCurrency(amount, '') + ' ' + name + ' shares in the ' + serverDisplayName + ' group').catch((err) => {
                   if (stats.feedChannel === null || stats.feedChannel === '') {
                     interaction.followUp({content: 'The transaction was successfully sent but <@' + receiverID + '> is unable to receive DMs and the feed channel is turned off for this group.\n\nThis means <@' + receiverID + '> has no way of being notified of this transaction. Just a heads up!', ephemeral: true})
                   }
@@ -1463,15 +1479,15 @@ client.on('interactionCreate', async (interaction) => {
                 const votes = await tally(serverID)
                 if (await userVoted(senderID, serverID)) {
                   updateVote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
-                  interaction.editReply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a __**s**__' + interaction.options.getNumber('income') + ' daily income has been updated!', ephemeral: true})
+                  interaction.editReply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + formatCurrency(interaction.options.getNumber('income')) + ' daily income has been updated!', ephemeral: true})
                 } else {
                   if ((votes[0].length + 1) > (superMajority * numUsers)) {
                     acceptVotes(serverID, prettyDecimal(votes[0].fee), prettyDecimal(votes[0].income))
                     clearVotes(serverID)
-                    interaction.editReply({content: 'Your vote has reached a super majority and the votes have been accepted!\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n__**s**__' + votes[0].income + ' daily income', ephemeral: true})
+                    interaction.editReply({content: 'Your vote has reached a super majority and the votes have been accepted!\n\n' + 'New rates:\n' + votes[0].fee + '% transaction fee\n' + formatCurrency(votes[0].income) + ' daily income', ephemeral: true})
                   } else {
                     vote(senderID, serverID, interaction.options.getNumber('fee'), interaction.options.getNumber('income'))
-                    interaction.editReply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a __**s**__' + interaction.options.getNumber('income') + ' daily income has been recorded!', ephemeral: true})
+                    interaction.editReply({content: 'Your vote for a ' + interaction.options.getNumber('fee') + '% transaction fee and a ' + formatCurrency(interaction.options.getNumber('income')) + ' daily income has been recorded!', ephemeral: true})
                   }
                 }
               }
@@ -1483,10 +1499,10 @@ client.on('interactionCreate', async (interaction) => {
           if (isNaN(votes[0].fee)) {
             interaction.editReply({content: "No votes have been recorded yet. Try voting by typing '/vote'", ephemeral: true})
           } else {
-            interaction.editReply({content: votes[0].length + ' votes so far, result would be a ' + votes[0].fee + '% transaction fee and a __**s**__' + votes[0].income + ' daily income', ephemeral: true})
+            interaction.editReply({content: votes[0].length + ' votes so far, result would be a ' + votes[0].fee + '% transaction fee and a ' + formatCurrency(votes[0].income) + ' daily income', ephemeral: true})
           }
         } else if (interaction.commandName === 'rates') {
-          interaction.editReply({content: 'Current rates:\n' + stats.fee + '% transaction fee\n__**s**__' + stats.income + ' daily income', ephemeral: true})
+          interaction.editReply({content: 'Current rates:\n' + stats.fee + '% transaction fee\n' + formatCurrency(stats.income) + ' daily income', ephemeral: true})
         } else if (interaction.commandName === 'update') {
           if (interaction.member.roles.cache.has(stats.adminRoleID)) {
             if (interaction.options.getRole('general_role') !== null) {
@@ -1523,15 +1539,15 @@ client.on('interactionCreate', async (interaction) => {
         if ((myVote[0].fee).length === 0) {
           interaction.editReply({content: "You haven't voted in the current round. Submit a vote with '/vote'", ephemeral: true})
         } else {
-          interaction.editReply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a __**s**__' + myVote[0].income + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
+          interaction.editReply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a ' + formatCurrency(myVote[0].income) + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
         }
         } else if (interaction.commandName === 'stats') {
           const currentDate = Date.now();
           const volume = await getVolume(serverID, currentDate - 604800000, currentDate)
           const gini = roundUp(await computeGiniIndex(serverID))
           const numUsers = (await getUsers(serverID)).length
-          const serverMoneySupply = roundUp(await moneySupply(serverID))
-          interaction.editReply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: __**s**__' + serverMoneySupply + '\nTransaction volume (last 7 days): __**s**__' + roundUp(volume.volume) + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: __**s**__' + stats.income + '\nInequality “Gini” index: ' + gini, ephemeral: true})
+          const serverMoneySupply = formatCurrency(await moneySupply(serverID))
+          interaction.editReply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + serverMoneySupply + '\nTransaction volume (last 7 days): ' + formatCurrency(volume.volume) + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: ' + formatCurrency(stats.income) + '\nInequality “Gini” index: ' + gini, ephemeral: true})
         } else if (interaction.commandName === 'strike') {
           const receiverID = interaction.options.getUser('user').id
           if (await userExists(receiverID, serverID)) {
@@ -1567,18 +1583,18 @@ client.on('interactionCreate', async (interaction) => {
             let sentMessage = 'Sent:\n'
             for (let i = 0; i < sent.length; i += 1) {
               if (sent[i].message !== null) {
-                sentMessage += ('__**s**__' + sent[i].amount + ' to' + ' <@' + sent[i].userID + '> for ' + sent[i].message + '\n')
+                sentMessage += (formatCurrency(sent[i].amount) + ' to' + ' <@' + sent[i].userID + '> for ' + sent[i].message + '\n')
               } else {
-                sentMessage += ('__**s**__' + sent[i].amount + ' to' + ' <@' + sent[i].userID + '>\n')
+                sentMessage += (formatCurrency(sent[i].amount) + ' to' + ' <@' + sent[i].userID + '>\n')
               }
             }
             sentMessage += '\n'
             let receivedMessage = 'Received:\n'
             for (let i = 0; i < received.length; i += 1) {
               if (received[i].message !== null) {
-                receivedMessage += ('__**s**__' + received[i].amount + ' from' + ' <@' + received[i].userID + '> for ' + received[i].message + '\n')
+                receivedMessage += (formatCurrency(received[i].amount) + ' from' + ' <@' + received[i].userID + '> for ' + received[i].message + '\n')
               } else {
-                receivedMessage += ('__**s**__' + received[i].amount + ' from' + ' <@' + received[i].userID + '>\n')
+                receivedMessage += (formatCurrency(received[i].amount) + ' from' + ' <@' + received[i].userID + '>\n')
               }
             }
             receivedMessage += '\n'
@@ -1595,9 +1611,9 @@ client.on('interactionCreate', async (interaction) => {
               for (let i = 0; i < sentExt.length; i += 1) {
                 const serverDisplayName = (await client.guilds.fetch(sentExt[i].receiverServerID)).name
                 if (sentExt[i].message !== null) {
-                  sentExtMessage += ('__**s**__' + sentExt[i].amount + ' to ' + serverDisplayName + ' for ' + sentExt[i].message + '\n')
+                  sentExtMessage += (formatCurrency(sentExt[i].amount) + ' to ' + serverDisplayName + ' for ' + sentExt[i].message + '\n')
                 } else {
-                  sentExtMessage += ('__**s**__' + sentExt[i].amount + ' to ' + serverDisplayName + '\n')
+                  sentExtMessage += (formatCurrency(sentExt[i].amount) + ' to ' + serverDisplayName + '\n')
                 }
               }
               sentExtMessage += '\n'
@@ -1608,9 +1624,9 @@ client.on('interactionCreate', async (interaction) => {
                 const serverDisplayName = (await client.guilds.fetch(receivedExt[i].originServerID)).name
                 const remittance = await getRemittanceByCoupon(receivedExt[i].coupon)
                 if (remittance[0].message !== null) {
-                  receivedExtMessage += ('__**s**__' + receivedExt[i].amount + ' from ' + serverDisplayName + ' for ' + remittance[0].message + '\n')
+                  receivedExtMessage += (formatCurrency(receivedExt[i].amount) + ' from ' + serverDisplayName + ' for ' + remittance[0].message + '\n')
                 } else {
-                  receivedExtMessage += ('__**s**__' + receivedExt[i].amount + ' from ' + serverDisplayName + '\n')
+                  receivedExtMessage += (formatCurrency(receivedExt[i].amount) + ' from ' + serverDisplayName + '\n')
                 }
               }
               receivedExtMessage += '\n'
@@ -1619,8 +1635,8 @@ client.on('interactionCreate', async (interaction) => {
           }
         } else if (interaction.commandName === 'exchange_add') {
           const userExchanges = await getExchanges(senderID, serverID)
-          const balance = prettyDecimal(await getUserBalance(senderID, serverID))
-          const amount = prettyDecimal(interaction.options.getNumber('amount'))
+          const balance = await getUserBalance(senderID, serverID)
+          const amount = interaction.options.getNumber('amount')
           if (amount <= balance) {
             if (userExchanges.length > 0) {
               for (let i = 0; i < userExchanges.length; i += 1) {
@@ -1651,7 +1667,7 @@ client.on('interactionCreate', async (interaction) => {
               } catch (error) {}
             }
           } else {
-            interaction.editReply({content: 'You currently have __**s**__' + balance + ', but __**s**__' + amount + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
+            interaction.editReply({content: 'You currently have ' + formatCurrency(balance) + ', but ' + formatCurrency(amount) + ' is needed to create this exchange pairing. Please try again with a lower amount', ephemeral: true})
           }
         } else if (interaction.commandName === 'exchanges') {
           const serverExchanges = await getExchangesByServer(serverID)
@@ -1673,7 +1689,7 @@ client.on('interactionCreate', async (interaction) => {
             if (prettyDecimal(foreignExchange[0].rate) === prettyDecimal(1 / pairing[0].rate)) {
               status = 'active'
             }
-            message += '<@' + serverExchanges[i].userID + '> created an exchange for ' + foreignName + ' shares (' + (await client.guilds.fetch(pairing[0].serverID)).name  + ' - ' + (await client.guilds.fetch(pairing[0].serverID)).id + ') which has a current balance of ' + prettyDecimal(pairing[0].balance) + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1. This exchange is currently ' + status + '.\n\n'
+            message += '<@' + serverExchanges[i].userID + '> created an exchange for ' + foreignName + ' shares (' + (await client.guilds.fetch(pairing[0].serverID)).name  + ' - ' + (await client.guilds.fetch(pairing[0].serverID)).id + ') which has a current balance of ' + formatCurrency(pairing[0].balance, '') + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1. This exchange is currently ' + status + '.\n\n'
           }
           interaction.editReply({content: message, ephemeral: true})
         } else if (interaction.commandName === 'transfer') {
@@ -1681,7 +1697,7 @@ client.on('interactionCreate', async (interaction) => {
           const foreignAmount = interaction.options.getNumber('amount')
           const receiverID = interaction.options.getString('server')
           const foreignFee = (await getServerStats(receiverID)).fee
-          const foreignAmountWithFee = prettyDecimal(foreignAmount / ((100 - foreignFee) / 100))
+          const foreignAmountWithFee = foreignAmount / ((100 - foreignFee) / 100)
           const exchanges = await validExchangePairs(serverID, receiverID)
           if (!exchanges) {
             interaction.editReply({content: 'There are no active exchange pairs for this transfer', ephemeral: true})
@@ -1696,9 +1712,9 @@ client.on('interactionCreate', async (interaction) => {
               interaction.editReply({content: 'There are no exchanges pairs with enough liquidity for this transfer', ephemeral: true})
             } else {
               const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
-              const amount = prettyDecimal(foreignAmountWithFee * bestRoute.rate)
-              const fee = prettyDecimal((amount * (stats.fee / 100)))
-              const amountWithFee = prettyDecimal((amount + fee))
+              const amount = foreignAmountWithFee * bestRoute.rate
+              const fee = amount * (stats.fee / 100)
+              const amountWithFee = amount + fee
               if (amountWithFee <= balance) {
                 const redeemable = foreignAmount
                 const foreignName = (await getServerStats(receiverID)).name
@@ -1724,16 +1740,16 @@ client.on('interactionCreate', async (interaction) => {
                 const embed = new EmbedBuilder()
                   .setColor(0x0099FF)
                   .setTitle('Transfer')
-                  .setDescription('The best route will cost you __**s**__' + amountWithFee + ' and will be able to be redeemed for ' + redeemable + ' ' + foreignName  + ' shares in ' + receiverDisplayName + ' after fees')
+                  .setDescription('The best route will cost you ' + formatCurrency(amountWithFee) + ' and will be able to be redeemed for ' + formatCurrency(redeemable, '') + ' ' + foreignName  + ' shares in ' + receiverDisplayName + ' after fees')
                   .setFooter({ text: String(remittanceID)});
                 await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
               } else {
-                interaction.editReply({content: 'You currently have __**s**__' + balance + ', but __**s**__' + amountWithFee + ' is needed to send the __**s**__' + amount + ' with the ' + stats.fee + '% transaction fee.', ephemeral: true})
+                interaction.editReply({content: 'You currently have ' + formatCurrency(balance) + ', but ' + formatCurrency(amountWithFee) + ' is needed to send the ' + formatCurrency(amount) + ' with the ' + stats.fee + '% transaction fee.', ephemeral: true})
               }
             }
           }
         } else if (interaction.commandName === 'withdraw') {
-          const balance = prettyDecimal(await getUserBalance(senderID, serverID))
+          const balance = await getUserBalance(senderID, serverID)
           const row = new ActionRowBuilder()
                   .addComponents(
                     new ButtonBuilder()
@@ -1744,7 +1760,7 @@ client.on('interactionCreate', async (interaction) => {
           const embed = new EmbedBuilder()
                   .setColor(0x0099FF)
                   .setTitle('Withdraw From Group')
-                  .setDescription('Are you sure you want to withdraw yourself from this group? Your current balance of  __**s**__' + balance + ' will be burned and will not be recoverable.');
+                  .setDescription('Are you sure you want to withdraw yourself from this group? Your current balance of ' + formatCurrency(balance) + ' will be burned and will not be recoverable.');
                 await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
         } else if (interaction.commandName === 'delegate_endorsements') {
           if (await userExists(interaction.options.getUser('user').id, serverID)) {
@@ -1828,7 +1844,7 @@ client.on('interactionCreate', async (interaction) => {
             }
           } catch (error) {
             console.log(error)
-            interaction.followUp({content: 'Payment was successfully created but is unable to be sent into the assigned feed channel. Let server admin know.', ephemeral: true})
+            interaction.followUp({content: 'Your payment coupon is: ' + remittance[0].coupon + ' and will expire in 5 minutes\n\nPayment was successfully created but is unable to be sent into the assigned feed channel. Let server admin know.', ephemeral: true})
           } 
         }
       } else {
@@ -1862,7 +1878,7 @@ client.on('interactionCreate', async (interaction) => {
         payExchange(exchange_b[0].id, (exchange_b[0].feesEarned + redeemLog[0].fee))
         couponRedeemed(coupon[0].coupon)
         redeemed(redeemID)
-        interaction.editReply({content: 'Your redemption was successful. Your current balance in ' + serverDisplayName + ' is: ' + (balance + redeemLog[0].amount) + ' ' + stats.name + ' shares', ephemeral: true})
+        interaction.editReply({content: 'Your redemption was successful. Your current balance in ' + serverDisplayName + ' is: ' + formatCurrency(balance + redeemLog[0].amount, '') + ' ' + stats.name + ' shares', ephemeral: true})
         if (stats.feedChannel !== null && stats.feedChannel !== '') {
           try {
             if (coupon[0].message !== null) {
