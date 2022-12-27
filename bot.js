@@ -1389,7 +1389,7 @@ client.on('interactionCreate', async (interaction) => {
                     } catch (error) {}
                   }
                   let endorsementsNeeded = await votesNeeded(receiverID, serverID)
-                  if ((currentVotes + 1 >= endorsementsNeeded) || (numUsers === 2 && currentVotes > 1)) {
+                  if ((currentVotes + endorsingPower >= endorsementsNeeded) || (numUsers === 2 && currentVotes > 1)) {
                     try {
                       await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.add(String(stats.generalRoleID)).catch((err) => {console.log(err)});
                     }
