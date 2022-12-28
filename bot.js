@@ -1411,7 +1411,11 @@ client.on('interactionCreate', async (interaction) => {
                 }
             }
           } else {
-            interaction.editReply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
+            if (await userExists(receiverID, serverID)) {
+              interaction.editReply({content: '<@' + receiverID + '> is already a member of this group!', ephemeral: true})
+            } else {
+              interaction.editReply({content: '<@' + receiverID + '> has not requested to join the group', ephemeral: true})
+            }
           }
         } else if (interaction.commandName === 'unendorse') { 
           if (await alreadyDelegated(senderID, serverID)) {
