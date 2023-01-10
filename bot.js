@@ -1883,6 +1883,11 @@ client.on('interactionCreate', async (interaction) => {
             interaction.editReply({content: "Unable to add marketplace item. Please let server admin know", ephemeral: true})
             return
           }
+          if (stats.feedChannel !== null && stats.feedChannel !== '') {
+            try {
+              interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> has added: '" + interaction.options.getString('item') + "' to the marketplace!")
+            } catch (error) {}
+          }
           interaction.editReply({content: "Your item has been added and will be automatically removed after 7 days. View all items with the '/market' command", ephemeral: true})
         } else if (interaction.commandName === 'market_remove') {
           const index = interaction.options.getNumber('index')
@@ -2090,6 +2095,6 @@ export async function main() {
 }
 
 main()
-runPayments()
+//runPayments()
 checkCoupons()
 checkWeekly()
