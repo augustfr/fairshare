@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import { runPayments } from './dailyPayments.js'
 import { sendMessage } from './dailyPayments.js'
 import { checkCoupons } from './couponChecker.js'
-import { checkRequests } from './requestChecker.js'
+import { checkWeekly } from './weeklyChecker.js'
 import {
   Client,
   GatewayIntentBits,
@@ -43,6 +43,9 @@ import ExchangeWithdrawFeesCommand from './commands/exchangeWithdrawFees.js';
 import WithdrawCommand from './commands/withdraw.js';
 import DelegateCommand from './commands/delegate.js';
 import UndelegateCommand from './commands/undelegate.js';
+import MarketCommand from './commands/market.js';
+import MarketAddCommand from './commands/marketAdd.js';
+import MarketRemoveCommand from './commands/marketRemove.js';
 
 config();
 
@@ -694,6 +697,52 @@ async function viewCandidates(serverID) {
   .select('userID')
   .eq('serverID', serverID)
   return data
+}
+
+async function getMarketItems(serverID) {
+  const { data, error } = await supabase
+  .from('marketplace')
+  .select()
+  .eq('serverID', serverID)
+  const index = data.map(a => a.id)
+  const items = data.map(a => a.item)
+  const users = data.map(a => a.senderID)
+  const creationDates = data.map(a => a.created_at)
+  return [{items, users, creationDates, index}]
+}
+
+export async function getAllMarketItems() {
+  const { data, error } = await supabase
+  .from('marketplace')
+  .select()
+  const index = data.map(a => a.id)
+  const items = data.map(a => a.item)
+  const users = data.map(a => a.senderID)
+  const creationDates = data.map(a => a.created_at)
+  const serverIDs = data.map(a => a.serverID)
+  return [{items, users, creationDates, index, serverIDs}]
+}
+
+async function getMarketItem(index) {
+  const { data, error } = await supabase
+  .from('marketplace')
+  .select()
+  .eq('id', index)
+  return data
+}
+
+async function addMarketItem(serverID, senderID, item) {
+  const currentDate = new Date();
+  const { error } = await supabase
+  .from('marketplace')
+  .insert({item: item, created_at: currentDate, senderID: senderID, serverID: serverID})
+}
+
+export async function removeMarketItem(index) {
+  const { error } = await supabase
+  .from('marketplace')
+  .delete()
+  .eq('id', index)
 }
 
 async function moneySupply(serverID) {
@@ -1815,6 +1864,36 @@ client.on('interactionCreate', async (interaction) => {
           } else {
             interaction.editReply({content: "You haven't delegated your endorsement power to any other user. Use the '/delegate_endorsements' if you'd like to delegate.", ephemeral: true})
           }
+        } else if (interaction.commandName === 'market') {
+          let market
+          try {
+            market = await getMarketItems(serverID)
+          } catch (error) {
+            interaction.editReply({content: "There are no current items for this group", ephemeral: true})
+            return
+          }
+          let message = ''
+          for (let i = 0; i < market[0].items.length; i += 1) {
+            message += (market[0].index[i] + '. ' + market[0].items[i] + ' - <@' + market[0].users[i] + '>\n')
+          }
+          interaction.editReply({content: message, ephemeral: true})
+        } else if (interaction.commandName === 'market_add') {
+          try {
+            await addMarketItem(serverID, senderID, interaction.options.getString('item'))
+          } catch (error) {
+            interaction.editReply({content: "Unable to add marketplace item. Please let server admin know", ephemeral: true})
+            return
+          }
+          interaction.editReply({content: "Your item has been added and will be automatically removed after 7 days. View all items with the '/market' command", ephemeral: true})
+        } else if (interaction.commandName === 'market_remove') {
+          const index = interaction.options.getNumber('index')
+          const item = await getMarketItem(index)
+          if (item[0].senderID === senderID) {
+            await removeMarketItem(index)
+            interaction.editReply({content: "Successfully removed item", ephemeral: true})
+          } else {
+            interaction.editReply({content: "You did not create this item", ephemeral: true})
+          }          
         }
       } else {
           interaction.editReply({content: "Please request to join the group by typing '/join' if you have not already", ephemeral: true})
@@ -1985,7 +2064,10 @@ export async function main() {
     WithdrawCommand,
     DelegateCommand,
     UndelegateCommand,
-    UnendorseCommand
+    UnendorseCommand,
+    MarketCommand,
+    MarketAddCommand,
+    MarketRemoveCommand
   ];
 
     try {
@@ -2011,4 +2093,4 @@ export async function main() {
 main()
 runPayments()
 checkCoupons()
-checkRequests()
+checkWeekly()

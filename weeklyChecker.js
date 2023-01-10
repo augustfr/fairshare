@@ -1,6 +1,6 @@
 import { config } from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
-import { clearEndorsements, clearRequest } from './bot.js';
+import { clearEndorsements, clearRequest, getAllMarketItems, removeMarketItem } from './bot.js';
 import {
   Client,
   GatewayIntentBits,
@@ -57,7 +57,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export async function checkRequests() {
+export async function checkWeekly() {
 
   client.login(TOKEN);
 
@@ -66,13 +66,25 @@ export async function checkRequests() {
     for (let i = 0; i < requestList.requesterIDs.length; i++) {
       if (requestList.creationTimes.length > 0) {
         if (!(await checkUserID(requestList.requesterIDs[i], requestList.serverIDs[i]))) {
-          clearRequest(requestList.requesterIDs[i], requestList.serverIDs[i])
+          await clearRequest(requestList.requesterIDs[i], requestList.serverIDs[i])
           await clearEndorsements(requestList.requesterIDs[i], requestList.serverIDs[i])
         }
         if ((Date.now() - (new Date(requestList.creationTimes[i]).getTime()) > 604800000)) {
-          clearRequest(requestList.requesterIDs[i], requestList.serverIDs[i])
+          await clearRequest(requestList.requesterIDs[i], requestList.serverIDs[i])
           await clearEndorsements(requestList.requesterIDs[i], requestList.serverIDs[i])
           console.log('Deleted request by ' + requestList.requesterIDs[i] + ' in serverID: ' + requestList.serverIDs[i])
+        }
+      }
+    }
+    const items = await getAllMarketItems()
+    for (let i = 0; i < items[0].creationDates.length; i++) {
+      if (items[0].creationDates.length > 0) {
+        if (!(await checkUserID(items[0].users[i], items[0].serverIDs[i]))) {
+          await removeMarketItem(items[0].index[i])
+        }
+        if ((Date.now() - (new Date(items[0].creationDates[i]).getTime()) > 604800000)) {
+          await removeMarketItem(items[0].index[i])
+          console.log('Deleted market item by ' + items[0].users[i] + ' in serverID: ' + items[0].serverIDs[i])
         }
       }
     }
