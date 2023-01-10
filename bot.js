@@ -1866,17 +1866,16 @@ client.on('interactionCreate', async (interaction) => {
           }
         } else if (interaction.commandName === 'market') {
           let market
-          try {
-            market = await getMarketItems(serverID)
-          } catch (error) {
+          market = await getMarketItems(serverID)
+          if (market[0].items.length === 0) {
             interaction.editReply({content: "There are no current items for this group", ephemeral: true})
-            return
+          } else {
+            let message = ''
+            for (let i = 0; i < market[0].items.length; i += 1) {
+              message += (market[0].index[i] + '. ' + market[0].items[i] + ' - <@' + market[0].users[i] + '>\n')
+            }
+            interaction.editReply({content: message, ephemeral: true})
           }
-          let message = ''
-          for (let i = 0; i < market[0].items.length; i += 1) {
-            message += (market[0].index[i] + '. ' + market[0].items[i] + ' - <@' + market[0].users[i] + '>\n')
-          }
-          interaction.editReply({content: message, ephemeral: true})
         } else if (interaction.commandName === 'market_add') {
           try {
             await addMarketItem(serverID, senderID, interaction.options.getString('item'))
