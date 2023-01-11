@@ -1872,7 +1872,7 @@ client.on('interactionCreate', async (interaction) => {
           } else {
             let message = ''
             for (let i = 0; i < market[0].items.length; i += 1) {
-              message += (market[0].items[i] + ' - <@' + market[0].users[i] + '> (' + market[0].index[i] + ')\n')
+              message += (market[0].items[i] + ' - <@' + market[0].users[i] + '> (' + market[0].index[i] + ')\n\n')
             }
             interaction.editReply({content: message, ephemeral: true})
           }
