@@ -83,6 +83,13 @@ export async function checkWeekly() {
           await removeMarketItem(items[0].index[i])
         }
         if ((Date.now() - (new Date(items[0].creationDates[i]).getTime()) > 604800000)) {
+          let userID = client.users.cache.get(items[0].users[i])
+          let item = items[0].items[i]
+          try {
+            userID.send("Your marketplace item: '" + item + "' has expired.")
+          } catch (error) {
+            console.log(error)
+          }
           await removeMarketItem(items[0].index[i])
           console.log('Deleted market item by ' + items[0].users[i] + ' in serverID: ' + items[0].serverIDs[i])
         }

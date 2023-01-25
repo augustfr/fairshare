@@ -13,7 +13,8 @@ const setupCommand = new SlashCommandBuilder()
             .setRequired(true))
     .addChannelOption(option =>
         option.setName('feed_channel')
-        .setDescription('What channel should transactions be publically sent in?'))
+        .setDescription('What channel should transactions be publically sent in?')
+        .setRequired(true))
     .addNumberOption(option => 
         option.setName('fee')
             .setDescription("The percentage fee that will be added on to each transaction ('5' for '5%') (default is 8%)"))
