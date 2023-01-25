@@ -82,7 +82,7 @@ export async function checkWeekly() {
         if (!(await checkUserID(items[0].users[i], items[0].serverIDs[i]))) {
           await removeMarketItem(items[0].index[i])
         }
-        if ((Date.now() - (new Date(items[0].creationDates[i]).getTime()) > 604800000)) {
+        if ((Date.now() - (new Date(items[0].creationDates[i]).getTime()) > 2592000000)) {
           let userID = client.users.cache.get(items[0].users[i])
           let item = items[0].items[i]
           try {
