@@ -1756,58 +1756,62 @@ client.on('interactionCreate', async (interaction) => {
         } else if (interaction.commandName === 'transfer') {
           const balance = await getUserBalance(senderID, serverID)
           const foreignAmount = interaction.options.getNumber('amount')
-          const receiverID = interaction.options.getString('server')
-          const foreignFee = (await getServerStats(receiverID)).fee
-          const foreignAmountWithFee = foreignAmount / ((100 - foreignFee) / 100)
-          const exchanges = await validExchangePairs(serverID, receiverID)
-          if (!exchanges) {
-            interaction.editReply({content: 'There are no active exchange pairs for this transfer', ephemeral: true})
-          } else {
-            let usableExchanges = []
-            for (let i = 0; i < exchanges.length; i += 1) { 
-              if (foreignAmount <= exchanges[i].foreignBalance) {
-                usableExchanges.push(exchanges[i])
-              }
-            }
-            if (usableExchanges.length === 0) {
-              interaction.editReply({content: 'There are no exchanges pairs with enough liquidity for this transfer', ephemeral: true})
+          if (foreignAmount > 0) {
+            const receiverID = interaction.options.getString('server')
+            const foreignFee = (await getServerStats(receiverID)).fee
+            const foreignAmountWithFee = foreignAmount / ((100 - foreignFee) / 100)
+            const exchanges = await validExchangePairs(serverID, receiverID)
+            if (!exchanges) {
+              interaction.editReply({content: 'There are no active exchange pairs for this transfer', ephemeral: true})
             } else {
-              const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
-              const amount = foreignAmountWithFee * bestRoute.rate
-              const fee = amount * (stats.fee / 100)
-              const amountWithFee = amount + fee
-              if (amountWithFee <= balance) {
-                const redeemable = foreignAmount
-                const foreignName = (await getServerStats(receiverID)).name
-                const receiverDisplayName = (await client.guilds.fetch(receiverID)).name
-                const row = new ActionRowBuilder()
-                  .addComponents(
-                    new ButtonBuilder()
-                      .setCustomId('coupon')
-                      .setLabel('Generate Payment Coupon')
-                      .setStyle(ButtonStyle.Primary),
-                  );
-                let coupon
-                while (true) {
-                  coupon = generateUID()
-                  if (await couponExists(coupon)) {
-                    if (!(await getRemittanceByCoupon(coupon))[0].redeemed)
-                      break
-                  } else {
-                    break
-                  }
+              let usableExchanges = []
+              for (let i = 0; i < exchanges.length; i += 1) { 
+                if (foreignAmount <= exchanges[i].foreignBalance) {
+                  usableExchanges.push(exchanges[i])
                 }
-                const remittanceID = (await addRemittance(senderID, receiverID, coupon, amount, fee, serverID, interaction.options.getString('message')))[0].id
-                const embed = new EmbedBuilder()
-                  .setColor(0x0099FF)
-                  .setTitle('Transfer')
-                  .setDescription('The best route will cost you ' + formatCurrency(amountWithFee) + ' and will be able to be redeemed for ' + formatCurrency(redeemable, '') + ' ' + foreignName  + ' shares in ' + receiverDisplayName + ' after fees')
-                  .setFooter({ text: String(remittanceID)});
-                await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
+              }
+              if (usableExchanges.length === 0) {
+                interaction.editReply({content: 'There are no exchanges pairs with enough liquidity for this transfer', ephemeral: true})
               } else {
-                interaction.editReply({content: 'You currently have ' + formatCurrency(balance) + ', but ' + formatCurrency(amountWithFee) + ' is needed to send the ' + formatCurrency(amount) + ' with the ' + stats.fee + '% transaction fee.', ephemeral: true})
+                const bestRoute = usableExchanges.reduce(function(prev, curr) {return prev.rate < curr.rate ? prev : curr;})
+                const amount = foreignAmountWithFee * bestRoute.rate
+                const fee = amount * (stats.fee / 100)
+                const amountWithFee = amount + fee
+                if (amountWithFee <= balance) {
+                  const redeemable = foreignAmount
+                  const foreignName = (await getServerStats(receiverID)).name
+                  const receiverDisplayName = (await client.guilds.fetch(receiverID)).name
+                  const row = new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('coupon')
+                        .setLabel('Generate Payment Coupon')
+                        .setStyle(ButtonStyle.Primary),
+                    );
+                  let coupon
+                  while (true) {
+                    coupon = generateUID()
+                    if (await couponExists(coupon)) {
+                      if (!(await getRemittanceByCoupon(coupon))[0].redeemed)
+                        break
+                    } else {
+                      break
+                    }
+                  }
+                  const remittanceID = (await addRemittance(senderID, receiverID, coupon, amount, fee, serverID, interaction.options.getString('message')))[0].id
+                  const embed = new EmbedBuilder()
+                    .setColor(0x0099FF)
+                    .setTitle('Transfer')
+                    .setDescription('The best route will cost you ' + formatCurrency(amountWithFee) + ' and will be able to be redeemed for ' + formatCurrency(redeemable, '') + ' ' + foreignName  + ' shares in ' + receiverDisplayName + ' after fees')
+                    .setFooter({ text: String(remittanceID)});
+                  await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
+                } else {
+                  interaction.editReply({content: 'You currently have ' + formatCurrency(balance) + ', but ' + formatCurrency(amountWithFee) + ' is needed to send the ' + formatCurrency(amount) + ' with the ' + stats.fee + '% transaction fee.', ephemeral: true})
+                }
               }
             }
+          } else {
+            interaction.editReply({content: 'Must send an amount greater than 0', ephemeral: true})
           }
         } else if (interaction.commandName === 'withdraw') {
           const balance = await getUserBalance(senderID, serverID)
