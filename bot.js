@@ -1332,8 +1332,8 @@ client.on('interactionCreate', async (interaction) => {
               interaction.editReply({content: 'Please make sure the bot role is above the general role you just set (it currently is not).\n\nTo do this, go to Server Settings --> Roles and then drag the role for this bot to be above the <@&' + interaction.options.getRole('general_role') + '> role.\n\nOnce fixed, come back and run the setup command again.' , ephemeral: true});
               return
             } 
-            let income = interaction.options.getChannel('income')
-            let fee = interaction.options.getChannel('fee')
+            let income = interaction.options.getNumber('income')
+            let fee = interaction.options.getNumber('fee')
             if (income === null) {
               income = 50
             }
