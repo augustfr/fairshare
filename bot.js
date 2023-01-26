@@ -1342,12 +1342,7 @@ client.on('interactionCreate', async (interaction) => {
             }
             initUser(senderID, serverID, income)
             setServerStats(serverID, fee, income, interaction.options.getRole('general_role'),  interaction.options.getString('name'), interaction.options.getChannel('feed_channel'))
-            try {
-              interaction.guild.channels.cache.get((interaction.options.getChannel('feed_channel'))).send('FairShare has been setup successfully!')
-              interaction.editReply({content: 'Server settings have been set and you are the first member of the group!', ephemeral: true})
-            } catch (error) {
-              interaction.editReply({content: 'Server settings have been set and you are the first member of the group! The bot was unable to send into the assigned feed channel. Make sure the bot has access to send messages there! This can be checked in the channel permissions.', ephemeral: true})
-            }
+            interaction.editReply({content: 'Server settings have been set and you are the first member of the group!', ephemeral: true})
           }
           else {
             interaction.editReply({content: "Server has already been setup. Trying using '/update' instead", ephemeral: true})
