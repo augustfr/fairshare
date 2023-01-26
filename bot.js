@@ -1491,37 +1491,43 @@ client.on('interactionCreate', async (interaction) => {
         } else if (interaction.commandName === 'send') {
           const receiverID = interaction.options.getUser('user').id
           if (await userExists(senderID, serverID) && await userExists(receiverID, serverID)) {
-            const senderCurrentBalance = await getUserBalance(senderID, serverID)
-            const receiverCurrentBalance = await getUserBalance(receiverID, serverID)
-            const amount = interaction.options.getNumber('amount')
-            const fee = (amount * (stats.fee / 100))
-            const amountWithFee = amount + fee
-            if (senderCurrentBalance - amountWithFee < 0) {
-              interaction.editReply({content: 'You currently have ' + formatCurrency(senderCurrentBalance) + ', but ' + formatCurrency(amountWithFee) + ' are needed to send ' + formatCurrency(amount) + ' with a ' + stats.fee + '% transaction fee.', ephemeral: true})
+            if (receiverID === senderID) {
+              interaction.editReply({content: 'You cannot send to yourself!', ephemeral: true})
             } else {
-                updateBalance(senderID, serverID, senderCurrentBalance - amountWithFee)
-                updateBalance(receiverID, serverID, receiverCurrentBalance + amount)
-                transactionLog(serverID, senderID, receiverID, amount, fee, interaction.options.getString('message'))
-                await interaction.editReply({content: 'Sent ' + formatCurrency(amount) + ' to <@' + receiverID + '>, and a ' + formatCurrency(fee) + ' transaction fee was taken, totalling to ' + formatCurrency(amountWithFee), ephemeral: true})
-                interaction.options.getUser('user').send('<@' + senderID + '> has sent you ' + formatCurrency(amount, '') + ' ' + name + ' shares in the ' + serverDisplayName + ' group').catch((err) => {
-                  if (stats.feedChannel === null || stats.feedChannel === '') {
-                    interaction.followUp({content: 'The transaction was successfully sent but <@' + receiverID + '> is unable to receive DMs and the feed channel is turned off for this group.\n\nThis means <@' + receiverID + '> has no way of being notified of this transaction. Just a heads up!', ephemeral: true})
-                  }
-                })
-                if (stats.feedChannel !== null && stats.feedChannel !== '') {
-                  try {
-                    if (interaction.options.getString('message') !== null) {
-                      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '> for ' + interaction.options.getString('message'))
-                    } else {
-                      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '>')
+              const senderCurrentBalance = await getUserBalance(senderID, serverID)
+              const receiverCurrentBalance = await getUserBalance(receiverID, serverID)
+              const amount = interaction.options.getNumber('amount')
+              if (amount > 0) {
+                const fee = (amount * (stats.fee / 100))
+                const amountWithFee = amount + fee
+                if (senderCurrentBalance - amountWithFee < 0) {
+                  interaction.editReply({content: 'You currently have ' + formatCurrency(senderCurrentBalance) + ', but ' + formatCurrency(amountWithFee) + ' are needed to send ' + formatCurrency(amount) + ' with a ' + stats.fee + '% transaction fee.', ephemeral: true})
+                } else {
+                    updateBalance(senderID, serverID, senderCurrentBalance - amountWithFee)
+                    updateBalance(receiverID, serverID, receiverCurrentBalance + amount)
+                    transactionLog(serverID, senderID, receiverID, amount, fee, interaction.options.getString('message'))
+                    await interaction.editReply({content: 'Sent ' + formatCurrency(amount) + ' to <@' + receiverID + '>, and a ' + formatCurrency(fee) + ' transaction fee was taken, totalling to ' + formatCurrency(amountWithFee), ephemeral: true})
+                    interaction.options.getUser('user').send('<@' + senderID + '> has sent you ' + formatCurrency(amount, '') + ' ' + name + ' shares in the ' + serverDisplayName + ' group').catch((err) => {
+                      if (stats.feedChannel === null || stats.feedChannel === '') {
+                        interaction.followUp({content: 'The transaction was successfully sent but <@' + receiverID + '> is unable to receive DMs and the feed channel is turned off for this group.\n\nThis means <@' + receiverID + '> has no way of being notified of this transaction. Just a heads up!', ephemeral: true})
+                      }
+                    })
+                    if (stats.feedChannel !== null && stats.feedChannel !== '') {
+                      try {
+                        if (interaction.options.getString('message') !== null) {
+                          interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '> for ' + interaction.options.getString('message'))
+                        } else {
+                          interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid <@' + receiverID + '>')
+                        }
+                      } catch (error) {
+                        interaction.followUp({content: 'Transaction was successfully sent but is unable to be sent into the assigned feed channel. Let server admin know.', ephemeral: true})
+                      } 
                     }
-                  } catch (error) {
-                    interaction.followUp({content: 'Transaction was successfully sent but is unable to be sent into the assigned feed channel. Let server admin know.', ephemeral: true})
-                  } 
-                }
+                  }
+              } else {
+                interaction.editReply({content: 'Must send an amount greater than 0' , ephemeral: true})
               }
-          } else if (receiverID === senderID) {
-            interaction.editReply({content: 'You cannot send to yourself!', ephemeral: true})
+            }
           } else {
             interaction.editReply({content: '<@' + receiverID + "> has not joined the group. They can join with '/join'" , ephemeral: true})
           }
