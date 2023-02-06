@@ -1069,7 +1069,7 @@ client.on('interactionCreate', async (interaction) => {
                 if (prettyDecimal(userExchanges[i].rate) === prettyDecimal(1 / foreignExchange[0].rate)) {
                   status = 'Active'
                 }
-                message += 'Exchange ID: ' + userExchanges[i].id + '\nTotal balance: ' + formatCurrency(userExchanges[i].balance, '') + ' ' + name + ' shares' + '\nFunding from you: ' + formatCurrency(userExchanges[i].fundsFromUser, '') + ' ' + name + ' shares' + '\nFees earned: ' + formatCurrency(userExchanges[i].feesEarned, '') + ' ' + name + ' shares' +  '\nExchanges with: ' + foreignExchangeDisplayName + '\nForeign balance: ' + formatCurrency(foreignExchange[0].balance, '') + ' ' + foreignExchangeName + ' shares' + '\nForeign User: <@' + foreignExchange[0].userID + '>\nRate: ' + userExchanges[i].rate + ':1' + '\nStatus: ' + status + '\n\n'
+                message += 'Exchange ID: ' + userExchanges[i].id + '\nTotal balance: ' + formatCurrency(userExchanges[i].balance, '') + ' ' + name + ' shares' + '\nFunding from you: ' + formatCurrency(userExchanges[i].fundsFromUser, '') + ' ' + name + ' shares' + '\nFees earned: ' + formatCurrency(userExchanges[i].feesEarned, '') + ' ' + name + ' shares' +  '\nExchanges with: ' + foreignExchangeDisplayName + '\nForeign balance: ' + formatCurrency(foreignExchange[0].balance, '') + ' ' + foreignExchangeName + ' shares' + '\nForeign user: <@' + foreignExchange[0].userID + '>\nRate: ' + userExchanges[i].rate + ':1' + '\nStatus: ' + status + '\n\n'
               }
             } 
           } else {
