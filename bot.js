@@ -1069,7 +1069,7 @@ client.on('interactionCreate', async (interaction) => {
                 if (prettyDecimal(userExchanges[i].rate) === prettyDecimal(1 / foreignExchange[0].rate)) {
                   status = 'Active'
                 }
-                message += 'Exchange ID: ' + userExchanges[i].id + '\nTotal balance: ' + formatCurrency(userExchanges[i].balance, '') + ' ' + name + ' shares' + '\nFunding from you: ' + formatCurrency(userExchanges[i].fundsFromUser, '') + ' ' + name + ' shares' + '\nFees earned: ' + formatCurrency(userExchanges[i].feesEarned, '') + ' ' + name + ' shares' +  '\nExchanges with: ' + foreignExchangeDisplayName + '\nForeign balance: ' + formatCurrency(foreignExchange[0].balance, '') + ' ' + foreignExchangeName + ' shares' + '\nRate: ' + userExchanges[i].rate + ':1' + '\nStatus: ' + status + '\n\n'
+                message += 'Exchange ID: ' + userExchanges[i].id + '\nTotal balance: ' + formatCurrency(userExchanges[i].balance, '') + ' ' + name + ' shares' + '\nFunding from you: ' + formatCurrency(userExchanges[i].fundsFromUser, '') + ' ' + name + ' shares' + '\nFees earned: ' + formatCurrency(userExchanges[i].feesEarned, '') + ' ' + name + ' shares' +  '\nExchanges with: ' + foreignExchangeDisplayName + '\nForeign balance: ' + formatCurrency(foreignExchange[0].balance, '') + ' ' + foreignExchangeName + ' shares' + '\nForeign User: <@' + foreignExchange[0].userID + '>\nRate: ' + userExchanges[i].rate + ':1' + '\nStatus: ' + status + '\n\n'
               }
             } 
           } else {
@@ -1719,7 +1719,7 @@ client.on('interactionCreate', async (interaction) => {
             }
             if (stats.feedChannel !== null && stats.feedChannel !== '') { 
               try {
-                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> has created an exchange for " + foreignServer.name + ' shares (' + (await client.guilds.fetch(foreignServer.serverID)).name + '). Now waiting on the member from ' + (await client.guilds.fetch(foreignServer.serverID)).name + " to fund their side of the exchange! To see all exchanges from this server, run the '/exchanges' command.")
+                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> has created an exchange for " + foreignServer.name + ' shares (' + (await client.guilds.fetch(foreignServer.serverID)).name + ' - ' + foreignServer.serverID + '). Now waiting on the member from ' + (await client.guilds.fetch(foreignServer.serverID)).name + " to fund their side of the exchange! To see all exchanges from this server, run the '/exchanges' command.")
               } catch (error) {}
             }
           } else {
@@ -1745,7 +1745,7 @@ client.on('interactionCreate', async (interaction) => {
             if (prettyDecimal(foreignExchange[0].rate) === prettyDecimal(1 / pairing[0].rate)) {
               status = 'active'
             }
-            message += '<@' + serverExchanges[i].userID + '> created an exchange for ' + foreignName + ' shares (' + (await client.guilds.fetch(pairing[0].serverID)).name  + ' - ' + (await client.guilds.fetch(pairing[0].serverID)).id + ') which has a current balance of ' + formatCurrency(pairing[0].balance, '') + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1. This exchange is currently ' + status + '.\n\n'
+            message += '<@' + serverExchanges[i].userID + '> runs an exchange for ' + foreignName + ' shares (' + (await client.guilds.fetch(pairing[0].serverID)).name  + ' - ' + pairing[0].serverID + ') which has a current balance of ' + formatCurrency(pairing[0].balance, '') + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1. This exchange is currently ' + status + '.\n\n'
           }
           interaction.editReply({content: message, ephemeral: true})
         } else if (interaction.commandName === 'transfer') {
