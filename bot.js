@@ -1164,14 +1164,14 @@ client.on('interactionCreate', async (interaction) => {
                       try {
                         foreignUser.send('<@' + interaction.user.id + '> has changed the rate on their side of the exchange to ' + rate + ':1. The exchange pair is valid')
                       } catch (error) {}
-                      if (foreignFeedChannel !== null && foreignFeedChannel !== '') {
+                      if (foreignFeedChannel !== null && foreignFeedChannel !== '' && currentExchangeBalance === 0) {
                         try {
                           await sendMessage('The exchange for ' + server.name + ' shares (' + (await client.guilds.fetch(exchange[0].serverID)).name  + '), run by <@' + foreignExchange[0].userID + ">, is now active! View all exchanges by running the '/exchanges' command.", foreignFeedChannel)
                         } catch (error) {
                           console.log(error)
                         } 
                       }
-                      if (feedChannel !== null && feedChannel !== '') {
+                      if (feedChannel !== null && feedChannel !== '' && currentExchangeBalance === 0) {
                         try {
                           await sendMessage('The exchange for ' + foreignServer.name + ' shares (' + (await client.guilds.fetch(foreignExchange[0].serverID)).name  + '), run by <@' + exchange[0].userID+ ">, is now active! View all exchanges by running the '/exchanges' command.", feedChannel)
                         } catch (error) {} 
