@@ -1606,26 +1606,30 @@ client.on('interactionCreate', async (interaction) => {
           interaction.editReply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + serverMoneySupply + '\nTransaction volume (last 7 days): ' + formatCurrency(volume.volume) + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: ' + formatCurrency(stats.income) + '\nInequality “Gini” index: ' + gini, ephemeral: true})
         } else if (interaction.commandName === 'strike') {
           const receiverID = interaction.options.getUser('user').id
-          if (await userExists(receiverID, serverID)) {
-            if (await strikeAlreadyGiven(senderID, receiverID, serverID)) {
-              interaction.editReply({content: 'You have already given a strike to <@' + receiverID + '>', ephemeral: true})
-            } else {
-              const numUsers = (await getUsers(serverID)).length
-              const strikes = await getStrikes(receiverID, serverID)
-              addStrike(receiverID, serverID, strikes + 1)
-              recordStrike(senderID, receiverID, serverID)
-              if ((strikes + 1) > (superMajority * numUsers)) {
-                terminateUser(receiverID, serverID)
-                clearStrikes(receiverID, serverID)
-                await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.remove(String(stats.generalRoleID)).catch((err) => {console.log(err)});
-                interaction.editReply({content: 'You have successfully given a strike to <@' + receiverID + '> which has voted them out of the group', ephemeral: true})
-                interaction.options.getUser('user').send('You have been voted out of the ' + serverDisplayName + " group. You can request to join back in by going to the group's server and using '/join'").catch((err) => {});
-              } else {
-                interaction.editReply({content: 'You have successfully given a strike to <@' + receiverID + '>', ephemeral: true})
-              }
-            }
+          if (receiverID === senderID) {
+            interaction.editReply({content: "You can't strike yourself!", ephemeral: true})
           } else {
-            interaction.editReply({content: '<@' + receiverID + '> is not in this group', ephemeral: true})
+            if (await userExists(receiverID, serverID)) {
+              if (await strikeAlreadyGiven(senderID, receiverID, serverID)) {
+                interaction.editReply({content: 'You have already given a strike to <@' + receiverID + '>', ephemeral: true})
+              } else {
+                const numUsers = (await getUsers(serverID)).length
+                const strikes = await getStrikes(receiverID, serverID)
+                addStrike(receiverID, serverID, strikes + 1)
+                recordStrike(senderID, receiverID, serverID)
+                if ((strikes + 1) > (superMajority * numUsers)) {
+                  terminateUser(receiverID, serverID)
+                  clearStrikes(receiverID, serverID)
+                  await interaction.guild.members.cache.get(interaction.options.getUser('user').id).roles.remove(String(stats.generalRoleID)).catch((err) => {console.log(err)});
+                  interaction.editReply({content: 'You have successfully given a strike to <@' + receiverID + '> which has voted them out of the group', ephemeral: true})
+                  interaction.options.getUser('user').send('You have been voted out of the ' + serverDisplayName + " group. You can request to join back in by going to the group's server and using '/join'").catch((err) => {});
+                } else {
+                  interaction.editReply({content: 'You have successfully given a strike to <@' + receiverID + '>', ephemeral: true})
+                }
+              }
+            } else {
+              interaction.editReply({content: '<@' + receiverID + '> is not in this group', ephemeral: true})
+            }
           }
         } else if (interaction.commandName === 'recent') {
           const currentDate = Date.now();
