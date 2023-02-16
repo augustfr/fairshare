@@ -2088,15 +2088,16 @@ client.on('interactionCreate', async (interaction) => {
       const amountWithFee = totalSpend + fee
       const senderCurrentBalance = await getUserBalance(senderID, serverID)
       for (let index = 0; index < users.length; index++) {
-        const newAmount = (await getUserBalance(users[index], serverID)) + amount
-        await updateBalance(users[index], serverID, newAmount)
-        transactionLog(serverID, senderID, users[index], amount, indFee, '')
-        const user = await client.users.fetch(users[index])
-        user.send('<@' + senderID + '> has sent you ' + formatCurrency(amount, '') + ' ' + stats.name + ' shares in the ' + serverDisplayName + ' group').catch((err) => {});
-
+        if (users[index] !== senderID) {
+          const newAmount = (await getUserBalance(users[index], serverID)) + amount
+          await updateBalance(users[index], serverID, newAmount)
+          transactionLog(serverID, senderID, users[index], amount, indFee, '')
+          const user = await client.users.fetch(users[index])
+          user.send('<@' + senderID + '> has sent you ' + formatCurrency(amount, '') + ' ' + stats.name + ' shares in the ' + serverDisplayName + ' group').catch((err) => {});
+        }
       } 
       const newAmount = senderCurrentBalance - amountWithFee
-        await updateBalance(senderID, serverID, newAmount)
+      await updateBalance(senderID, serverID, newAmount)
       interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> has paid everyone in the group ' + formatCurrency(amount) + '!')
       interaction.editReply({content: "You have successfully paid each member in the group!", ephemeral: true})
   }
