@@ -2098,7 +2098,7 @@ client.on('interactionCreate', async (interaction) => {
       } 
       const newAmount = senderCurrentBalance - amountWithFee
       await updateBalance(senderID, serverID, newAmount)
-      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid everyone in the group ' + formatCurrency(amount) + '!')
+      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> paid @everyone in the group ' + formatCurrency(amount) + '!')
       interaction.editReply({content: "You have successfully paid each member in the group!", ephemeral: true})
   }
 }
