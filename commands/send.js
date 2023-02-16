@@ -2,7 +2,7 @@ import { SlashCommandBuilder } from '@discordjs/builders';
 
 const sendCommand = new SlashCommandBuilder()
     .setName('send')
-    .setDescription('Send currency')
+    .setDescription('Send shares')
     .addUserOption(option =>
 		option.setName('user')
             .setDescription('User to send to')

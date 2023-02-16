@@ -46,6 +46,7 @@ import UndelegateCommand from './commands/undelegate.js';
 import MarketCommand from './commands/market.js';
 import MarketAddCommand from './commands/marketAdd.js';
 import MarketRemoveCommand from './commands/marketRemove.js';
+import SendAllCommand from './commands/sendAll.js';
 
 config();
 
@@ -1496,7 +1497,7 @@ client.on('interactionCreate', async (interaction) => {
                 const fee = (amount * (stats.fee / 100))
                 const amountWithFee = amount + fee
                 if (senderCurrentBalance - amountWithFee < 0) {
-                  interaction.editReply({content: 'You currently have ' + formatCurrency(senderCurrentBalance) + ', but ' + formatCurrency(amountWithFee) + ' are needed to send ' + formatCurrency(amount) + ' with a ' + stats.fee + '% transaction fee.', ephemeral: true})
+                  interaction.editReply({content: 'You currently have ' + formatCurrency(senderCurrentBalance) + ', but ' + formatCurrency(amountWithFee) + ' are needed to send ' + formatCurrency(amount) + ' with the ' + stats.fee + '% transaction fee.', ephemeral: true})
                 } else {
                     updateBalance(senderID, serverID, senderCurrentBalance - amountWithFee)
                     updateBalance(receiverID, serverID, receiverCurrentBalance + amount)
@@ -1526,6 +1527,34 @@ client.on('interactionCreate', async (interaction) => {
           } else {
             interaction.editReply({content: '<@' + receiverID + "> has not joined the group. They can join with '/join'" , ephemeral: true})
           }
+          } else if (interaction.commandName === 'send_to_all') {
+            const amount = interaction.options.getNumber('amount')
+            if (amount > 0) { 
+              const users = await getUsers(serverID)
+              const totalSpend = amount * (users.length - 1)
+              const fee = (totalSpend * (stats.fee / 100))
+              const amountWithFee = totalSpend + fee
+              const senderCurrentBalance = await getUserBalance(senderID, serverID)
+              if (senderCurrentBalance - amountWithFee > 0) {
+                const row = new ActionRowBuilder()
+              .addComponents(
+                new ButtonBuilder()
+                  .setCustomId('send_all')
+                  .setLabel('Send to All')
+                  .setStyle(ButtonStyle.Danger));
+  
+              const embed = new EmbedBuilder()
+                .setColor(0x0099FF)
+                .setTitle('Send to All')
+                .setDescription('Are you sure you want to send each member ' + formatCurrency(amount) + '? This will cost you ' + formatCurrency(amountWithFee) + ' including the transaction fee.')
+                .setFooter({ text: String(amount)});
+              await interaction.editReply({components: [row], embeds: [embed], ephemeral: true});
+              } else {
+                interaction.editReply({content: 'You currently have ' + formatCurrency(senderCurrentBalance) + ', but ' + formatCurrency(amountWithFee) + ' are needed to send ' + formatCurrency(amount) + ' with the ' + stats.fee + '% transaction fee.', ephemeral: true})
+              }
+            } else {
+              interaction.editReply({content: 'Must send an amount greater than 0' , ephemeral: true})
+            }
           } else if (interaction.commandName === 'vote') {
             if (stats.voteOpen) {
               if (interaction.options.getNumber('fee') > 100) {
@@ -2046,6 +2075,30 @@ client.on('interactionCreate', async (interaction) => {
     } else {
       interaction.editReply({content: "You aren't a part of this group", ephemeral: true})
     }
+  } else if (interaction.customId === 'send_all') { 
+      const serverID = interaction.guildId
+      const senderID = interaction.user.id
+      const serverDisplayName = interaction.guild.name
+      const stats = await getServerStats(serverID)
+      const users = await getUsers(serverID)
+      const amount = parseInt(interaction.message.embeds[0].data.footer.text)
+      const totalSpend = amount * (users.length - 1)
+      const indFee = (amount * (stats.fee / 100))
+      const fee = (totalSpend * (stats.fee / 100))
+      const amountWithFee = totalSpend + fee
+      const senderCurrentBalance = await getUserBalance(senderID, serverID)
+      for (let index = 0; index < users.length; index++) {
+        const newAmount = (await getUserBalance(users[index], serverID)) + amount
+        await updateBalance(users[index], serverID, newAmount)
+        transactionLog(serverID, senderID, users[index], amount, indFee, '')
+        const user = await client.users.fetch(users[index])
+        user.send('<@' + senderID + '> has sent you ' + formatCurrency(amount, '') + ' ' + stats.name + ' shares in the ' + serverDisplayName + ' group').catch((err) => {});
+
+      } 
+      const newAmount = senderCurrentBalance - amountWithFee
+        await updateBalance(senderID, serverID, newAmount)
+      interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + '> has paid everyone in the group ' + formatCurrency(amount) + '!')
+      interaction.editReply({content: "You have successfully paid each member in the group!", ephemeral: true})
   }
 }
 });
@@ -2082,7 +2135,8 @@ export async function main() {
     UnendorseCommand,
     MarketCommand,
     MarketAddCommand,
-    MarketRemoveCommand
+    MarketRemoveCommand,
+    SendAllCommand
   ];
 
     try {
