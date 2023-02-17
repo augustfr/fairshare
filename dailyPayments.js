@@ -70,16 +70,6 @@ export async function runPayments() {
 
         await getUsers(stats.serverID)
 
-        const users = await getUsers(stats.serverID)
-        for (let index = 0; index < users.length; index++) {
-          if (await userExists(users[index], stats.serverID)) {
-          } else {
-            console.log(users[index])
-            console.log(stats.serverID)
-          }
-      }
-
-
         if (Date.now() - (new Date(details[1]).getTime()) > 86400000) {
           const users = await getUsers(stats.serverID)
           for (let index = 0; index < users.length; index++) {
@@ -87,11 +77,9 @@ export async function runPayments() {
               const newAmount = (await getUserBalance(users[index], stats.serverID)) + stats.income
               await updateBalance(users[index], stats.serverID, newAmount)
             } else {
-              console.log(users[index])
-              console.log(stats.serverID)
               try {
-                //terminateUser(users[index], stats.serverID)
-                //clearStrikes(users[index], stats.serverID)
+                terminateUser(users[index], stats.serverID)
+                clearStrikes(users[index], stats.serverID)
               } catch (error) {
                 console.log(error)
               }
