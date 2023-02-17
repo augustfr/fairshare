@@ -77,6 +77,7 @@ export async function runPayments() {
               const newAmount = (await getUserBalance(users[index], stats.serverID)) + stats.income
               await updateBalance(users[index], stats.serverID, newAmount)
             } else {
+              console.log('Attempting to terminate:', users[index], 'from:', stats.serverID)
               try {
                 terminateUser(users[index], stats.serverID)
                 clearStrikes(users[index], stats.serverID)
