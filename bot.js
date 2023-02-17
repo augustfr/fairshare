@@ -366,7 +366,7 @@ async function initUser(userID, serverID, income) {
   .insert({ userID: userID, balance: income, serverID: serverID, dateJoined: currentDate})
 }
 
-async function userExists(userID, serverID) {
+export async function userExists(userID, serverID) {
   const {data} = await supabase
   .from('balances')
   .select('serverID')
@@ -650,7 +650,7 @@ async function clearVotes(serverID) {
   .eq('serverID', serverID)
 }
 
-async function clearStrikes(userID, serverID) {
+export async function clearStrikes(userID, serverID) {
   const { error } = await supabase 
   .from('strikes')
   .delete()
@@ -658,7 +658,7 @@ async function clearStrikes(userID, serverID) {
   .eq('receiverID', userID)
 }
 
-async function terminateUser(userID, serverID) {
+export async function terminateUser(userID, serverID) {
   const { error } = await supabase 
   .from('balances')
   .delete()

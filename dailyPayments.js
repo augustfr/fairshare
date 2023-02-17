@@ -1,8 +1,5 @@
 import { config } from 'dotenv';
-import { getUserBalance } from "./bot.js";
-import { updateBalance } from "./bot.js";
-import { getServerStats } from "./bot.js";
-import { getUsers } from "./bot.js";
+import { getUsers, userExists, getServerStats, updateBalance, getUserBalance, terminateUser, clearStrikes } from "./bot.js";
 import {
   Client,
   GatewayIntentBits,
@@ -76,8 +73,19 @@ export async function runPayments() {
         if (Date.now() - (new Date(details[1]).getTime()) > 86400000) {
           const users = await getUsers(stats.serverID)
           for (let index = 0; index < users.length; index++) {
-            const newAmount = (await getUserBalance(users[index], stats.serverID)) + stats.income
-            await updateBalance(users[index], stats.serverID, newAmount)
+            if (await userExists(users[index], stats.serverID)) {
+              const newAmount = (await getUserBalance(users[index], stats.serverID)) + stats.income
+              await updateBalance(users[index], stats.serverID, newAmount)
+            } else {
+              console.log(users[index])
+              console.log(stats.serverID)
+              try {
+                //terminateUser(users[index], stats.serverID)
+                //clearStrikes(users[index], stats.serverID)
+              } catch (error) {
+                console.log(error)
+              }
+            }
           } 
           const newPayoutDate = new Date(new Date(details[1]).getTime() + 86400000)
           await updatePayout(stats.serverID, newPayoutDate)
