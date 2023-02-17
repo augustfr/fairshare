@@ -71,11 +71,13 @@ export async function runPayments() {
         await getUsers(stats.serverID)
 
         const users = await getUsers(stats.serverID)
-        if (await userExists(users[index], stats.serverID)) {
-        } else {
-          console.log(users[index])
-          console.log(stats.serverID)
-        }
+        for (let index = 0; index < users.length; index++) {
+          if (await userExists(users[index], stats.serverID)) {
+          } else {
+            console.log(users[index])
+            console.log(stats.serverID)
+          }
+      }
 
 
         if (Date.now() - (new Date(details[1]).getTime()) > 86400000) {
