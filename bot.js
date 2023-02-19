@@ -366,7 +366,7 @@ async function initUser(userID, serverID, income) {
   .insert({ userID: userID, balance: income, serverID: serverID, dateJoined: currentDate})
 }
 
-export async function userExists(userID, serverID) {
+async function userExists(userID, serverID) {
   const {data} = await supabase
   .from('balances')
   .select('serverID')

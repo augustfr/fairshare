@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { getUsers, userExists, getServerStats, updateBalance, getUserBalance, terminateUser, clearStrikes } from "./bot.js";
+import { getUsers, getServerStats, updateBalance, getUserBalance, terminateUser, clearStrikes } from "./bot.js";
 import {
   Client,
   GatewayIntentBits,
@@ -53,6 +53,16 @@ export async function sendMessage(msg, channelid) {
   channel.send(msg);
 }
 
+async function checkMember(userID, serverID) {
+  const guild = client.guilds.cache.get(serverID);
+  try {
+    await guild.members.fetch(userID);
+    return true
+  } catch (error) {
+    return false
+  }
+}
+
 export async function runPayments() {
 
   client.login(TOKEN);
@@ -68,19 +78,19 @@ export async function runPayments() {
 
         const details = [stats.serverID, stats.latestPayout]
 
-        await getUsers(stats.serverID)
-
         if (Date.now() - (new Date(details[1]).getTime()) > 86400000) {
           const users = await getUsers(stats.serverID)
           for (let index = 0; index < users.length; index++) {
-            if (await userExists(users[index], stats.serverID)) {
+            const member = await checkMember(users[index], stats.serverID);
+            if (member) {
               const newAmount = (await getUserBalance(users[index], stats.serverID)) + stats.income
               await updateBalance(users[index], stats.serverID, newAmount)
             } else {
-              console.log('Attempting to terminate:', users[index], 'from:', stats.serverID)
+              console.log('Attempting to terminate', users[index], 'from', stats.serverID)
               try {
                 terminateUser(users[index], stats.serverID)
                 clearStrikes(users[index], stats.serverID)
+                console.log('Successfully terminated')
               } catch (error) {
                 console.log(error)
               }
