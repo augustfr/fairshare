@@ -69,7 +69,7 @@ export async function checkWeekly() {
           await clearRequest(requestList.requesterIDs[i], requestList.serverIDs[i])
           await clearEndorsements(requestList.requesterIDs[i], requestList.serverIDs[i])
         }
-        if ((Date.now() - (new Date(requestList.creationTimes[i]).getTime()) > 604800000)) {
+        if ((Date.now() - (new Date(requestList.creationTimes[i]).getTime()) > 1209600000)) { //check every 2 weeks
           await clearRequest(requestList.requesterIDs[i], requestList.serverIDs[i])
           await clearEndorsements(requestList.requesterIDs[i], requestList.serverIDs[i])
           console.log('Deleted request by ' + requestList.requesterIDs[i] + ' in serverID: ' + requestList.serverIDs[i])
@@ -95,6 +95,6 @@ export async function checkWeekly() {
         }
       }
     }
-    await sleep(3600000)
+    await sleep(14400000)
   }
 }
