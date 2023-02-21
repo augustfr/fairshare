@@ -1363,8 +1363,8 @@ client.on('interactionCreate', async (interaction) => {
             } catch (error) {
               const numUsers = (await getUsers(serverID)).length
               requestToJoin(senderID, serverID, Math.floor((numUsers * simpleMajority) + 1))
-              interaction.editReply({content: 'You have successfully requested to join the ' + serverDisplayName + " group!\n\nIf you aren't accepted into the group within a week, your request will expire and you'll have to submit a new join request.", ephemeral: true})
-              interaction.member.send('You have successfully requested to join the ' + serverDisplayName + " group!\n\nIf you aren't accepted into the group within a week, your request will expire and you'll have to submit a new join request.").catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you if you are accepted!', ephemeral: true})});
+              interaction.editReply({content: 'You have successfully requested to join the ' + serverDisplayName + " group!\n\nIf you aren't accepted into the group within 2 weeks, your request will expire and you'll have to submit a new join request.", ephemeral: true})
+              interaction.member.send('You have successfully requested to join the ' + serverDisplayName + " group!\n\nIf you aren't accepted into the group within 2 weeks, your request will expire and you'll have to submit a new join request.").catch((err) => {interaction.followUp({content: 'Please allow DMs from members in this server so the bot can DM you if you are accepted!', ephemeral: true})});
               if (stats.feedChannel !== null && stats.feedChannel !== '') {
                 try {
                   interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + senderID + "> has requested to join the group! Members can use '/endorse' if you'd like to give them an endorsement!")
