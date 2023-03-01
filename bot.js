@@ -1737,7 +1737,18 @@ client.on('interactionCreate', async (interaction) => {
                 }
               }
             }
-            const foreignUser = await client.users.fetch(interaction.options.getString('user'))
+            let foreignUser
+            try {
+              foreignUser = await client.users.fetch(interaction.options.getString('user'))
+            } catch (error) {
+              interaction.editReply({content: 'Please enter a userID. Example: 717793321535406150', ephemeral: true})
+            }
+            try {
+              const foreignServerID = await client.guilds.fetch(guildID);
+            } catch (error) {
+              interaction.editReply({content: 'Please enter a valid serverID. Example: 1039296120007962635', ephemeral: true})
+              return
+            }
             const foreignServer = await getServerStats(interaction.options.getString('server'))
             const rate = prettyDecimal(interaction.options.getNumber('rate'))
             const newExPair = await addExchangePair(senderID, serverID, amount, rate, foreignUser.id, foreignServer.serverID, 0, 0)
@@ -1770,15 +1781,15 @@ client.on('interactionCreate', async (interaction) => {
             return
           }
           for (let i = 0; i < serverExchanges.length; i += 1) {
-            const foreignExchange = await getExchangeByID(serverExchanges[i].id)
-            const foExID = foreignExchange[0].foreignExchangeID
-            const pairing = await getExchangeByID(foExID)
-            const foreignName = (await getServerStats(pairing[0].serverID)).name
+            let foreignExchange = await getExchangeByID(serverExchanges[i].id)
+            let foExID = foreignExchange[0].foreignExchangeID
+            let pairing = await getExchangeByID(foExID)
+            let foreignName = (await getServerStats(pairing[0].serverID)).name
             let status = 'inactive'
             if (prettyDecimal(foreignExchange[0].rate) === prettyDecimal(1 / pairing[0].rate)) {
               status = 'active'
             }
-            message += '<@' + serverExchanges[i].userID + '> runs an exchange for ' + foreignName + ' shares (' + (await client.guilds.fetch(pairing[0].serverID)).name  + ' - ' + pairing[0].serverID + ') which has a current balance of ' + formatCurrency(pairing[0].balance, '') + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1. This exchange is currently ' + status + '.\n\n'
+            message += '<@' + serverExchanges[i].userID + '> runs an exchange for ' + foreignName + ' shares (' + foreignName  + ' - ' + pairing[0].serverID + ') which has a current balance of ' + formatCurrency(pairing[0].balance, '') + ' ' + foreignName + ' shares and a rate of ' + serverExchanges[i].rate + ':1. This exchange is currently ' + status + '.\n\n'
           }
           interaction.editReply({content: message, ephemeral: true})
         } else if (interaction.commandName === 'transfer') {
