@@ -1752,6 +1752,7 @@ client.on('interactionCreate', async (interaction) => {
               foreignUser = await client.users.fetch(interaction.options.getString('user'))
             } catch (error) {
               interaction.editReply({content: 'Please enter a userID. Example: 717793321535406150', ephemeral: true})
+              return
             }
 
             try {
