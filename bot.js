@@ -377,6 +377,16 @@ async function userExists(userID, serverID) {
   return data !== null
 }
 
+async function serverExists(serverID) {
+  const {data} = await supabase
+  .from('balances')
+  .select('serverID')
+  .eq('serverID', serverID)
+  .limit(1)
+  .single()
+  return data !== null
+}
+
 async function alreadyDelegated(delegator, serverID) {
   const {data} = await supabase
   .from('endorsementDelegations')
@@ -1743,13 +1753,14 @@ client.on('interactionCreate', async (interaction) => {
             } catch (error) {
               interaction.editReply({content: 'Please enter a userID. Example: 717793321535406150', ephemeral: true})
             }
+
             try {
-              const foreignServerID = await client.guilds.fetch(guildID);
+              let foreignServerID = await client.guilds.fetch(interaction.options.getString('server'));
             } catch (error) {
               interaction.editReply({content: 'Please enter a valid serverID. Example: 1039296120007962635', ephemeral: true})
               return
             }
-            const foreignServer = await getServerStats(interaction.options.getString('server'))
+            let foreignServer = await getServerStats(interaction.options.getString('server'))
             const rate = prettyDecimal(interaction.options.getNumber('rate'))
             const newExPair = await addExchangePair(senderID, serverID, amount, rate, foreignUser.id, foreignServer.serverID, 0, 0)
             addForeignExchangeID(newExPair[0].id, newExPair[1].id)
