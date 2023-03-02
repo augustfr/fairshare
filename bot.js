@@ -2194,6 +2194,6 @@ export async function main() {
 }
 
 main()
-//runPayments()
+runPayments()
 checkCoupons()
 checkWeekly()
