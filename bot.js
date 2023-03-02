@@ -1331,7 +1331,24 @@ client.on('interactionCreate', async (interaction) => {
                   } 
               } 
             }
-            interaction.editReply({content: message, ephemeral: true})
+            let messageChunks = []
+            let chunk = ''
+            for (let i = 0; i < message.length; i++) {
+              if (chunk.length + 1 <= 2000) {
+                chunk += message[i]
+              } else {
+                messageChunks.push(chunk)
+                chunk = message[i]
+              }
+            }
+
+            if (chunk.length > 0) {
+              messageChunks.push(chunk)
+            }
+
+            messageChunks.forEach(chunk => {
+              interaction.followUp({content: chunk, ephemeral: true, split: true})
+            })
           }
         }
     } else if (interaction.commandName !== 'redeem' && interaction.commandName !== 'my_exchanges' && interaction.commandName !== 'exchange_withdraw' && interaction.commandName !== 'exchange_withdraw_fees' && interaction.commandName !== 'exchange_update') {
@@ -1691,7 +1708,7 @@ client.on('interactionCreate', async (interaction) => {
           } else {
             let sentMessage = 'Sent:\n'
             for (let i = 0; i < sent.length; i += 1) {
-              if (sent[i].message !== null) {
+              if (sent[i].message !== null && sent[i].message !== '') {
                 sentMessage += (formatCurrency(sent[i].amount) + ' to' + ' <@' + sent[i].userID + '> for ' + sent[i].message + '\n')
               } else {
                 sentMessage += (formatCurrency(sent[i].amount) + ' to' + ' <@' + sent[i].userID + '>\n')
@@ -1700,7 +1717,7 @@ client.on('interactionCreate', async (interaction) => {
             sentMessage += '\n'
             let receivedMessage = 'Received:\n'
             for (let i = 0; i < received.length; i += 1) {
-              if (received[i].message !== null) {
+              if (received[i].message !== null && received[i].message !== '') {
                 receivedMessage += (formatCurrency(received[i].amount) + ' from' + ' <@' + received[i].userID + '> for ' + received[i].message + '\n')
               } else {
                 receivedMessage += (formatCurrency(received[i].amount) + ' from' + ' <@' + received[i].userID + '>\n')
@@ -1719,7 +1736,7 @@ client.on('interactionCreate', async (interaction) => {
               sentExtMessage = 'External transfers:\n'
               for (let i = 0; i < sentExt.length; i += 1) {
                 const serverDisplayName = (await client.guilds.fetch(sentExt[i].receiverServerID)).name
-                if (sentExt[i].message !== null) {
+                if (sentExt[i].message !== null && sentExt[i].message !== '') {
                   sentExtMessage += (formatCurrency(sentExt[i].amount) + ' to ' + serverDisplayName + ' for ' + sentExt[i].message + '\n')
                 } else {
                   sentExtMessage += (formatCurrency(sentExt[i].amount) + ' to ' + serverDisplayName + '\n')
@@ -1732,7 +1749,7 @@ client.on('interactionCreate', async (interaction) => {
               for (let i = 0; i < receivedExt.length; i += 1) {
                 const serverDisplayName = (await client.guilds.fetch(receivedExt[i].originServerID)).name
                 const remittance = await getRemittanceByCoupon(receivedExt[i].coupon)
-                if (remittance[0].message !== null) {
+                if (remittance[0].message !== null && remittance[0].message !== '') {
                   receivedExtMessage += (formatCurrency(receivedExt[i].amount) + ' from ' + serverDisplayName + ' for ' + remittance[0].message + '\n')
                 } else {
                   receivedExtMessage += (formatCurrency(receivedExt[i].amount) + ' from ' + serverDisplayName + '\n')
@@ -1740,7 +1757,25 @@ client.on('interactionCreate', async (interaction) => {
               }
               receivedExtMessage += '\n'
             }
-            interaction.editReply({content: sentMessage + receivedMessage + sentExtMessage + receivedExtMessage, ephemeral: true})
+            let message = sentMessage + receivedMessage + sentExtMessage + receivedExtMessage
+            let messageChunks = []
+            let chunk = ''
+            for (let i = 0; i < message.length; i++) {
+              if (chunk.length + 1 <= 2000) {
+                chunk += message[i]
+              } else {
+                messageChunks.push(chunk)
+                chunk = message[i]
+              }
+            }
+
+            if (chunk.length > 0) {
+              messageChunks.push(chunk)
+            }
+
+            messageChunks.forEach(chunk => {
+              interaction.followUp({content: chunk, ephemeral: true, split: true})
+            })
           }
         } else if (interaction.commandName === 'exchange_add') {
           const userExchanges = await getExchanges(senderID, serverID)
@@ -2124,7 +2159,7 @@ client.on('interactionCreate', async (interaction) => {
         if (users[index] !== senderID) {
           const newAmount = (await getUserBalance(users[index], serverID)) + amount
           await updateBalance(users[index], serverID, newAmount)
-          transactionLog(serverID, senderID, users[index], amount, indFee, '')
+          transactionLog(serverID, senderID, users[index], amount, indFee)
           const user = await client.users.fetch(users[index])
           user.send('<@' + senderID + '> has sent you ' + formatCurrency(amount, '') + ' ' + stats.name + ' shares in the ' + serverDisplayName + ' group').catch((err) => {});
         }
@@ -2194,6 +2229,6 @@ export async function main() {
 }
 
 main()
-runPayments()
+//runPayments()
 checkCoupons()
 checkWeekly()
