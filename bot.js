@@ -1275,7 +1275,7 @@ client.on('interactionCreate', async (interaction) => {
                     message += serverDisplayName + ':\n\n'
                     sentMessage = 'Sent:\n'
                     for (let i = 0; i < sent.length; i += 1) {
-                      if (sent[i].message !== null) {
+                      if (sent[i].message !== null && sent[i].message !== '') {
                         sentMessage += (formatCurrency(sent[i].amount, '') + ' ' + name + ' shares to' + ' <@' + sent[i].userID + '> for ' + sent[i].message + '\n')
                       } else {
                         sentMessage += (formatCurrency(sent[i].amount, '') + ' ' + name + ' shares to' + ' <@' + sent[i].userID + '>\n')
@@ -1284,7 +1284,7 @@ client.on('interactionCreate', async (interaction) => {
                     sentMessage += '\n'
                     receivedMessage = 'Received:\n'
                     for (let i = 0; i < received.length; i += 1) {
-                      if (received[i].message !== null) {
+                      if (received[i].message !== null && received[i].message !== '') {
                         receivedMessage += (formatCurrency(received[i].amount, '') + ' ' + name + ' shares from' + ' <@' + received[i].userID + '> for ' + received[i].message + '\n')
                       } else {
                         receivedMessage += (formatCurrency(received[i].amount, '') + ' ' + name + ' shares from' + ' <@' + received[i].userID + '>\n')
@@ -1303,7 +1303,7 @@ client.on('interactionCreate', async (interaction) => {
                       sentExtMessage = 'External transfers:\n'
                       for (let i = 0; i < sentExt.length; i += 1) {
                         const serverDisplayName = (await client.guilds.fetch(sentExt[i].receiverServerID)).name
-                        if (sentExt[i].message !== null) {
+                        if (sentExt[i].message !== null && sentExt[i].message !== '') {
                           sentExtMessage += (formatCurrency(sentExt[i].amount, '') + ' ' + name + ' shares to ' + serverDisplayName + ' for ' + sentExt[i].message + '\n')
                         } else {
                           sentExtMessage += (formatCurrency(sentExt[i].amount, '') + ' ' + name + ' shares to ' + serverDisplayName + '\n')
@@ -1316,7 +1316,7 @@ client.on('interactionCreate', async (interaction) => {
                       for (let i = 0; i < receivedExt.length; i += 1) {
                         const serverDisplayName = (await client.guilds.fetch(receivedExt[i].originServerID)).name
                         const remittance = await getRemittanceByCoupon(receivedExt[i].coupon)
-                        if (remittance[0].message !== null) {
+                        if (remittance[0].message !== null && remittance[0].message !== '') {
                           receivedExtMessage += (formatCurrency(receivedExt[i].amount, '') + ' ' + name + ' shares from ' + serverDisplayName + ' for ' + remittance[0].message + '\n')
                         } else {
                           receivedExtMessage += (formatCurrency(receivedExt[i].amount, '') + ' ' + name + ' shares from ' + serverDisplayName + '\n')
