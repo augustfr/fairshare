@@ -47,10 +47,15 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export async function sendMessage(msg, channelid) {
-  const channel = await client.channels.fetch((channelid))
-  if(!channel) return; // if the channel is not in the cache return and do nothing
-  channel.send(msg);
+async function sendMessage(msg, channelid) {
+  const channel = await client.channels.fetch(channelid);
+  if (!channel) return;
+
+  const headers = {
+    'Authorization': `Bot ${client.token}`
+  };
+
+  channel.send(msg, { headers });
 }
 
 async function checkMember(userID, serverID) {

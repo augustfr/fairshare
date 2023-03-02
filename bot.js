@@ -1,6 +1,5 @@
 import { config } from 'dotenv';
 import { runPayments } from './dailyPayments.js'
-import { sendMessage } from './dailyPayments.js'
 import { checkCoupons } from './couponChecker.js'
 import { checkWeekly } from './weeklyChecker.js'
 import {
@@ -868,6 +867,17 @@ async function getUserExternalRedemptions(userID, serverID, startDate, endDate) 
     }
   }
   return result
+}
+
+async function sendMessage(msg, channelid) {
+  const channel = await client.channels.fetch(channelid);
+  if (!channel) return;
+
+  const headers = {
+    'Authorization': `Bot ${client.token}`
+  };
+
+  channel.send(msg, { headers });
 }
 
 async function getUserReceivedTransactions(userID, serverID, startDate, endDate) {
@@ -2184,6 +2194,6 @@ export async function main() {
 }
 
 main()
-runPayments()
+//runPayments()
 checkCoupons()
 checkWeekly()
