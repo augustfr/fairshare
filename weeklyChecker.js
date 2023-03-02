@@ -95,6 +95,6 @@ export async function checkWeekly() {
         }
       }
     }
-    await sleep(14400000)
+    await sleep(1800000)
   }
 }

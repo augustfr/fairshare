@@ -110,6 +110,12 @@ function roundUp(num) {
   return Math.ceil(num * 100) / 100;
 }
 
+function addTwoWeeks(dateStr) {
+  const date = new Date(dateStr)
+  date.setDate(date.getDate() + 14)
+  return Math.floor(date.getTime() / 1000)
+}
+
 async function validExchangePairs(serverID_a, serverID_b) {
   const exchanges_a = await getExchangesByServer(serverID_a)
   const exchanges_b = await getExchangesByServer(serverID_b)
@@ -704,7 +710,7 @@ async function tally(serverID) {
 async function viewCandidates(serverID) {
   const { data, error } = await supabase
   .from('joinRequests')
-  .select('userID')
+  .select()
   .eq('serverID', serverID)
   return data
 }
@@ -1430,10 +1436,11 @@ client.on('interactionCreate', async (interaction) => {
               } else {
                 endorsementsNeeded = (await votesNeeded(candidates[i].userID, serverID)) - currentVotes
               }
+              let expiryDate = addTwoWeeks(candidates[i].requestDate)
               if (endorsementsNeeded > 1) {
-                message += ('<@' + candidates[i].userID + '>, ' + endorsementsNeeded + ' endorsements needed')
+                message += ('<@' + candidates[i].userID + '>, ' + endorsementsNeeded + ' needed <t:' + expiryDate + ':R>')
               } else {
-                message += ('<@' + candidates[i].userID + '>, ' + endorsementsNeeded + ' endorsement needed')
+                message += ('<@' + candidates[i].userID + '>, ' + endorsementsNeeded + ' needed <t:' + expiryDate + ':R>')
               } 
               if (exists) {
                 if (await alreadyEndorsed(senderID, candidates[i].userID, serverID)) {
