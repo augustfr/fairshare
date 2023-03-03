@@ -1173,7 +1173,7 @@ client.on('interactionCreate', async (interaction) => {
                   const currentExchangeBalance = exchange[0].balance
                   const fundsFromUser = exchange[0].fundsFromUser + amount
                   const rate = prettyDecimal(interaction.options.getNumber('rate'))
-                  if (interaction.options.getNumber('rate') !== null) {
+                  if (interaction.options.getNumber('rate') !== null && rate !== exchange[0].rate) {
                     updateExchange(exchange[0].id, currentExchangeBalance + amount, rate, fundsFromUser)
                     const foreignUser = await client.users.fetch(foreignExchange[0].userID)
                     const foreignServer = await getServerStats(foreignExchange[0].serverID)
