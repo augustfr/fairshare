@@ -1676,7 +1676,8 @@ client.on('interactionCreate', async (interaction) => {
           const gini = roundUp(await computeGiniIndex(serverID))
           const numUsers = (await getUsers(serverID)).length
           const serverMoneySupply = formatCurrency(await moneySupply(serverID))
-          interaction.editReply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + serverMoneySupply + '\nTransaction volume (last 7 days): ' + formatCurrency(volume.volume) + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: ' + formatCurrency(stats.income) + '\nInequality “Gini” index: ' + gini, ephemeral: true})
+          const latestPayout = Math.floor(Date.parse(stats.latestPayout) / 1000)
+          interaction.editReply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + serverMoneySupply + '\nTransaction volume (last 7 days): ' + formatCurrency(volume.volume) + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: ' + formatCurrency(stats.income) + '\nGini "Inequality" index: ' + gini + '\nLatest dividend: <t:' + latestPayout + ':R>', ephemeral: true})
         } else if (interaction.commandName === 'strike') {
           const receiverID = interaction.options.getUser('user').id
           if (receiverID === senderID) {
