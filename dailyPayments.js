@@ -106,9 +106,9 @@ export async function runPayments() {
           console.log('Sent payouts to ' + stats.serverID)
           if (stats.feedChannel !== null && stats.feedChannel !== '') {
             try {
-              await sendMessage('<@&' + stats.generalRoleID + '>, your daily income of ' + stats.income + ' ' + stats.name + ' shares have been sent!', stats.feedChannel)
+              await sendMessage('<@&' + stats.generalRoleID + '>, your divident of ' + stats.income + ' ' + stats.name + ' shares have been sent!', stats.feedChannel)
             } catch (error) {
-              console.log('Daily income message failed to send to active feed channel in ' + stats.serverID)
+              console.log('Divident message failed to send to active feed channel in ' + stats.serverID)
             }
           }
         }
