@@ -15,8 +15,13 @@ const supabase = createClient(DATABASE_URL, SUPABASE_SERVICE_API_KEY);
 
 async function getCoupons() {
   const { data, error } = await supabase
-  .from('remittance')
-  .select()
+    .from('remittance')
+    .select()
+  
+  if (!data) {
+    return { coupons: [], creationTimes: [], funded: [], originServerIDs: [], userIDs: [], amounts: [], redemptions: [] };
+  }
+
   const coupons = data.map(a => a.coupon)
   const creationTimes = data.map(a => a.creationDate)
   const funded = data.map(a => a.funded)
@@ -24,7 +29,7 @@ async function getCoupons() {
   const userIDs = data.map(a => a.senderID)
   const amounts = data.map(a => a.amount)
   const redemptions = data.map(a => a.redeemed)
-  return {coupons, creationTimes, funded, originServerIDs, userIDs, amounts, redemptions}
+  return { coupons, creationTimes, funded, originServerIDs, userIDs, amounts, redemptions }
 }
 
 export async function deleteCoupon(coupon) {
