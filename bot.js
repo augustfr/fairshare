@@ -2134,40 +2134,45 @@ client.on('interactionCreate', async (interaction) => {
     const serverID = interaction.guildId
     const senderID = interaction.user.id
     if (await userExists(senderID, serverID)) { 
-      const stats = await getServerStats(serverID)
-      const serverDisplayName = interaction.guild.name
-      terminateUser(senderID, serverID)
-      await interaction.guild.members.cache.get(senderID).roles.remove(String(stats.generalRoleID)).catch((err) => {console.log(err)});
-      const allEndorsements = await getAllEndorsements(serverID)
       const numUsers = (await getUsers(serverID)).length
-      if (allEndorsements[0].length >= 1) {
-        for (let i = 0; i < allEndorsements[0].length; i += 1) {
-          let endorsementsNeeded = await votesNeeded(allEndorsements[0][i], serverID)
-          if (((allEndorsements[1][i]) >= endorsementsNeeded) || (numUsers === 2 && allEndorsements[1][i] > 1)) {
-            const endorsedUser = await client.users.fetch(allEndorsements[0][i])
-            const endorsedMember = await interaction.guild.members.fetch(endorsedUser.id);
-            try {
-              await endorsedMember.roles.add(String(stats.generalRoleID));
-            }
-            catch (error) {
-              console.log(error)
-              endorsedUser.send('You have been accepted into the ' + serverDisplayName + ' group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
-            }
-            initUser(endorsedUser.id, serverID, stats.income)
-            await clearEndorsements(endorsedUser.id, serverID)
-            clearRequest(endorsedUser.id, serverID)
-            endorsedUser.send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
-            if (stats.feedChannel !== null && stats.feedChannel !== '') {
+      if (numUsers === 1) {
+        interaction.editReply({content: "You are the only remaining member of this group and cannot withdraw.", ephemeral: true})
+      } else {
+        const stats = await getServerStats(serverID)
+        const serverDisplayName = interaction.guild.name
+        terminateUser(senderID, serverID)
+        await interaction.guild.members.cache.get(senderID).roles.remove(String(stats.generalRoleID)).catch((err) => {console.log(err)});
+        const allEndorsements = await getAllEndorsements(serverID)
+        if (allEndorsements[0].length >= 1) {
+          for (let i = 0; i < allEndorsements[0].length; i += 1) {
+            let endorsementsNeeded = await votesNeeded(allEndorsements[0][i], serverID)
+            if (((allEndorsements[1][i]) >= endorsementsNeeded) || (numUsers === 2 && allEndorsements[1][i] > 1)) {
+              const endorsedUser = await client.users.fetch(allEndorsements[0][i])
+              const endorsedMember = await interaction.guild.members.fetch(endorsedUser.id);
               try {
-                interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + endorsedUser.id + '> has been accepted into the group!')
-              } catch (error) {}
-            }
-           }
+                await endorsedMember.roles.add(String(stats.generalRoleID));
+              }
+              catch (error) {
+                console.log(error)
+                endorsedUser.send('You have been accepted into the ' + serverDisplayName + ' group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!').catch((err) => {});
+              }
+              initUser(endorsedUser.id, serverID, stats.income)
+              await clearEndorsements(endorsedUser.id, serverID)
+              clearRequest(endorsedUser.id, serverID)
+              endorsedUser.send('You have been accepted into the ' + serverDisplayName + ' group!').catch((err) => {});
+              if (stats.feedChannel !== null && stats.feedChannel !== '') {
+                try {
+                  interaction.guild.channels.cache.get((stats.feedChannel)).send('<@' + endorsedUser.id + '> has been accepted into the group!')
+                } catch (error) {}
+              }
+             }
+          }
         }
-      }
-      interaction.editReply({content: "You have been successfully withdrawn from this group. To request to join back in, use the '/join' command", ephemeral: true})
+        interaction.editReply({content: "You have been successfully withdrawn from this group. To request to join back in, use the '/join' command", ephemeral: true})
+      
+      } 
     } else {
-      interaction.editReply({content: "You aren't a part of this group", ephemeral: true})
+    interaction.editReply({content: "You aren't a part of this group", ephemeral: true})
     }
   } else if (interaction.customId === 'send_all') { 
       const serverID = interaction.guildId
