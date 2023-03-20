@@ -1473,6 +1473,14 @@ client.on('interactionCreate', async (interaction) => {
             message += "\nIf you are a member, use '/endorse' to endorse any of the above candidates!"
             interaction.editReply({content: message, ephemeral: true})
           }
+        } else if (interaction.commandName === 'stats') {
+          const currentDate = Date.now();
+          const volume = await getVolume(serverID, currentDate - 604800000, currentDate)
+          const gini = roundUp(await computeGiniIndex(serverID))
+          const numUsers = (await getUsers(serverID)).length
+          const serverMoneySupply = formatCurrency(await moneySupply(serverID))
+          const latestPayout = Math.floor(Date.parse(stats.latestPayout) / 1000)
+          interaction.editReply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + serverMoneySupply + '\nTransaction volume (last 7 days): ' + formatCurrency(volume.volume) + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: ' + formatCurrency(stats.income) + '\nGini "Inequality" index: ' + gini + '\nLatest dividend: <t:' + latestPayout + ':R>', ephemeral: true})
         } else if (await userExists(senderID, serverID)) {
           if (interaction.commandName === 'balance') {
             const balance = formatCurrency(await getUserBalance(senderID, serverID))
@@ -1688,14 +1696,6 @@ client.on('interactionCreate', async (interaction) => {
         } else {
           interaction.editReply({content: 'You have currently voted for a ' + myVote[0].fee + '% transaction fee and a ' + formatCurrency(myVote[0].income) + " daily income. To update your vote, use the '/vote' command.", ephemeral: true})
         }
-        } else if (interaction.commandName === 'stats') {
-          const currentDate = Date.now();
-          const volume = await getVolume(serverID, currentDate - 604800000, currentDate)
-          const gini = roundUp(await computeGiniIndex(serverID))
-          const numUsers = (await getUsers(serverID)).length
-          const serverMoneySupply = formatCurrency(await moneySupply(serverID))
-          const latestPayout = Math.floor(Date.parse(stats.latestPayout) / 1000)
-          interaction.editReply({content: 'Current server stats:\n\nParticipating members: ' + numUsers + '\nTotal money in circulation: ' + serverMoneySupply + '\nTransaction volume (last 7 days): ' + formatCurrency(volume.volume) + ' in ' + volume.numTransactions +' transactions\nTransaction fee: ' + stats.fee + '%\nDaily income: ' + formatCurrency(stats.income) + '\nGini "Inequality" index: ' + gini + '\nLatest dividend: <t:' + latestPayout + ':R>', ephemeral: true})
         } else if (interaction.commandName === 'strike') {
           const receiverID = interaction.options.getUser('user').id
           if (receiverID === senderID) {
