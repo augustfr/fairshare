@@ -84,6 +84,14 @@ export async function runPayments() {
         const details = [stats.serverID, stats.latestPayout]
 
         if (Date.now() - (new Date(details[1]).getTime()) > 86400000) {
+          const users = await getUsers(stats.serverID)
+          for (let index = 0; index < users.length; index++) {
+            const member = await checkMember(users[index], stats.serverID);
+            if (member) {
+              const newAmount = (await getUserBalance(users[index], stats.serverID)) + stats.income
+              await updateBalance(users[index], stats.serverID, newAmount)
+            }
+          } 
           const newPayoutDate = new Date(new Date(details[1]).getTime() + 86400000)
           await updatePayout(stats.serverID, newPayoutDate)
           console.log('Sent payouts to ' + stats.serverID)
