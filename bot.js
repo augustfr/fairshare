@@ -2008,7 +2008,27 @@ client.on('interactionCreate', async (interaction) => {
             for (let i = 0; i < market[0].items.length; i += 1) {
               message += (market[0].items[i] + ' - <@' + market[0].users[i] + '> (' + market[0].index[i] + ')\n\n')
             }
-            interaction.editReply({content: message, ephemeral: true})
+
+            let messageChunks = []
+            let chunk = ''
+            for (let i = 0; i < message.length; i++) {
+              if (chunk.length + 1 <= 2000) {
+                chunk += message[i]
+              } else {
+                messageChunks.push(chunk)
+                chunk = message[i]
+              }
+            }
+
+            if (chunk.length > 0) {
+              messageChunks.push(chunk)
+            }
+
+            messageChunks.forEach(chunk => {
+              interaction.followUp({content: chunk, ephemeral: true, split: true})
+            })
+
+            //interaction.editReply({content: message, ephemeral: true})
           }
         } else if (interaction.commandName === 'market_add') {
           try {
