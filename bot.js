@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import { runPayments } from "./dailyPayments.js";
+import { runHourlyChecker } from "./hourlyChecker.js";
 import { checkCoupons } from "./couponChecker.js";
 import { checkWeekly } from "./weeklyChecker.js";
 import {
@@ -27,7 +27,7 @@ import SettingsCommand from "./commands/settings.js";
 import MyVoteCommand from "./commands/myVote.js";
 import StatsCommand from "./commands/stats.js";
 import EndorseCommand from "./commands/endorse.js";
-import UnendorseCommand from "./commands/unendorse.js";
+import RejectCommand from "./commands/reject.js";
 import CandidatesCommand from "./commands/candidates.js";
 import StrikeCommand from "./commands/strike.js";
 import RecentCommand from "./commands/recent.js";
@@ -107,9 +107,9 @@ function roundUp(num) {
   return Math.ceil(num * 100) / 100;
 }
 
-function addTwoWeeks(dateStr) {
+function addOneDay(dateStr) {
   const date = new Date(dateStr);
-  date.setDate(date.getDate() + 14);
+  date.setDate(date.getDate() + 2);
   return Math.floor(date.getTime() / 1000);
 }
 
@@ -164,34 +164,37 @@ async function computeGiniIndex(serverID) {
   return sumOfDifferences / (2 * num * num * averageBalance);
 }
 
-async function requestToJoin(userID, serverID, votesNeeded) {
+async function requestToJoin(userID, serverID) {
   const currentDate = new Date();
-  const { error } = await supabase
-    .from("joinRequests")
-    .insert({
-      userID: userID,
-      serverID: serverID,
-      requestDate: currentDate,
-      votesNeeded: votesNeeded,
-    });
+  const { error } = await supabase.from("joinRequests").insert({
+    userID: userID,
+    serverID: serverID,
+    requestDate: currentDate,
+  });
 }
 
-async function votesNeeded(userID, serverID) {
+export async function getUserEndorsements(userID, serverID) {
   const { data, error } = await supabase
     .from("joinRequests")
-    .select("votesNeeded")
-    .eq("serverID", serverID)
-    .eq("userID", userID);
-  return data[0].votesNeeded;
-}
-
-async function getUserEndorsements(userID, serverID) {
-  const { data, error } = await supabase
-    .from("joinRequests")
-    .select("votes")
+    .select("endorsements")
     .eq("userID", userID)
     .eq("serverID", serverID);
-  return data[0].votes;
+  if (!data || data.length === 0) {
+    return 0;
+  }
+  return data[0].endorsements;
+}
+
+export async function getUserRejections(userID, serverID) {
+  const { data, error } = await supabase
+    .from("joinRequests")
+    .select("rejections")
+    .eq("userID", userID)
+    .eq("serverID", serverID);
+  if (!data || data.length === 0) {
+    return 0;
+  }
+  return data[0].rejections;
 }
 
 async function getNumEndorsementsFromUser(senderID, receiverID, serverID) {
@@ -204,44 +207,30 @@ async function getNumEndorsementsFromUser(senderID, receiverID, serverID) {
   const numEndorsements = data.map((a) => a.receiverID).length;
   return numEndorsements;
 }
-
-async function unendorse(senderID, receiverID, serverID) {
+async function addEndorsement(userID, serverID, updatedEndorsementCount) {
   const { error } = await supabase
-    .from("endorsements")
-    .delete()
-    .eq("senderID", senderID)
-    .eq("receiverID", receiverID)
+    .from("joinRequests")
+    .update({ endorsements: updatedEndorsementCount })
+    .eq("userID", userID)
     .eq("serverID", serverID);
 }
 
-async function getAllEndorsements(serverID) {
-  const { data, error } = await supabase
-    .from("joinRequests")
-    .select()
-    .eq("serverID", serverID);
-  const userIDs = data.map((a) => a.userID);
-  const votes = data.map((a) => a.votes);
-  return [userIDs, votes];
-}
-
-async function updateEndorsements(userID, serverID, updatedCount) {
+async function addRejection(userID, serverID, updatedRejectionCount) {
   const { error } = await supabase
     .from("joinRequests")
-    .update({ votes: updatedCount })
+    .update({ rejections: updatedRejectionCount })
     .eq("userID", userID)
     .eq("serverID", serverID);
 }
 
 async function addEndorsementDelegation(delegator, delegatee, serverID) {
   const currentDate = new Date();
-  const { error } = await supabase
-    .from("endorsementDelegations")
-    .insert({
-      created_at: currentDate,
-      delegatorID: delegator,
-      delegateeID: delegatee,
-      serverID: serverID,
-    });
+  const { error } = await supabase.from("endorsementDelegations").insert({
+    created_at: currentDate,
+    delegatorID: delegator,
+    delegateeID: delegatee,
+    serverID: serverID,
+  });
 }
 
 async function alreadyEndorsed(senderID, receiverID, serverID) {
@@ -256,10 +245,25 @@ async function alreadyEndorsed(senderID, receiverID, serverID) {
   return data !== null;
 }
 
-async function recordEndorsement(senderID, receiverID, serverID) {
-  const { error } = await supabase
+async function checkEndorsement(senderID, receiverID, serverID) {
+  const { data, error } = await supabase
     .from("endorsements")
-    .insert({ senderID: senderID, receiverID: receiverID, serverID: serverID });
+    .select("reject")
+    .eq("senderID", senderID)
+    .eq("receiverID", receiverID)
+    .eq("serverID", serverID)
+    .limit(1)
+    .single();
+  return data.reject;
+}
+
+async function recordEndorsement(senderID, receiverID, serverID, reject) {
+  const { error } = await supabase.from("endorsements").insert({
+    senderID: senderID,
+    receiverID: receiverID,
+    serverID: serverID,
+    reject: reject,
+  });
 }
 
 async function addRemittance(
@@ -434,16 +438,14 @@ async function addExchangePair(
   return data;
 }
 
-async function initUser(userID, serverID, income) {
+export async function initUser(userID, serverID, income) {
   const currentDate = new Date();
-  const { error } = await supabase
-    .from("balances")
-    .insert({
-      userID: userID,
-      balance: income,
-      serverID: serverID,
-      dateJoined: currentDate,
-    });
+  const { error } = await supabase.from("balances").insert({
+    userID: userID,
+    balance: income,
+    serverID: serverID,
+    dateJoined: currentDate,
+  });
 }
 
 async function userExists(userID, serverID) {
@@ -798,7 +800,7 @@ async function tally(serverID) {
   return [{ fee: median(fee), income: median(income), length: fee.length }];
 }
 
-async function viewCandidates(serverID) {
+export async function viewCandidates(serverID) {
   const { data, error } = await supabase
     .from("joinRequests")
     .select()
@@ -838,14 +840,12 @@ async function getMarketItem(index) {
 
 async function addMarketItem(serverID, senderID, item) {
   const currentDate = new Date();
-  const { error } = await supabase
-    .from("marketplace")
-    .insert({
-      item: item,
-      created_at: currentDate,
-      senderID: senderID,
-      serverID: serverID,
-    });
+  const { error } = await supabase.from("marketplace").insert({
+    item: item,
+    created_at: currentDate,
+    senderID: senderID,
+    serverID: serverID,
+  });
 }
 
 export async function removeMarketItem(index) {
@@ -1064,17 +1064,15 @@ async function transactionLog(
   message
 ) {
   const currentDate = new Date();
-  const { error } = await supabase
-    .from("transactions")
-    .insert({
-      date: currentDate,
-      senderID: userID,
-      receiverID: receiverID,
-      amount: amount,
-      fee: fee,
-      serverID: serverID,
-      message: message,
-    });
+  const { error } = await supabase.from("transactions").insert({
+    date: currentDate,
+    senderID: userID,
+    receiverID: receiverID,
+    amount: amount,
+    fee: fee,
+    serverID: serverID,
+    message: message,
+  });
 }
 
 function prettyDecimal(number) {
@@ -1146,7 +1144,7 @@ const mutex = new Mutex(); // create a mutex object
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-const superMajority = 0.66;
+export const superMajority = 0.66;
 const simpleMajority = 0.5;
 
 client.on("ready", () => console.log(`${client.user.tag} has logged in!`));
@@ -2053,10 +2051,7 @@ client.on("interactionCreate", async (interaction) => {
             });
           } else {
             try {
-              const currentVotes = await getUserEndorsements(
-                senderID,
-                serverID
-              );
+              await getUserEndorsements(senderID, serverID);
             } catch (error) {
               const numUsers = (await getUsers(serverID)).length;
               requestToJoin(
@@ -2068,14 +2063,14 @@ client.on("interactionCreate", async (interaction) => {
                 content:
                   "You have successfully requested to join the " +
                   serverDisplayName +
-                  " group!\n\nIf you aren't accepted into the group within 2 weeks, your request will expire and you'll have to submit a new join request. If you haven't already, send an intro so current members can learn more about you!",
+                  " group!\n\nIf you aren't accepted into the group within 48 hours, your request will expire and you'll have to submit a new join request. If you haven't already, send an intro so current members can learn more about you!",
                 ephemeral: true,
               });
               interaction.member
                 .send(
                   "You have successfully requested to join the " +
                     serverDisplayName +
-                    " group!\n\nIf you aren't accepted into the group within 2 weeks, your request will expire and you'll have to submit a new join request."
+                    " group!\n\nIf you aren't accepted into the group within 48 hours, your request will expire and you'll have to submit a new join request."
                 )
                 .catch((err) => {
                   interaction.followUp({
@@ -2101,6 +2096,21 @@ client.on("interactionCreate", async (interaction) => {
               content: "You have already requested to join this group",
               ephemeral: true,
             });
+            const users = await getUsers(serverID);
+            for (let index = 0; index < users.length; index++) {
+              if (users[index] !== senderID) {
+                const user = await client.users.fetch(users[index]);
+                user
+                  .send(
+                    "<@" +
+                      senderID +
+                      "> has requested to join " +
+                      serverDisplayName +
+                      ". Please go to the server, and either /endorse or /reject them."
+                  )
+                  .catch((err) => {});
+              }
+            }
           }
         } else if (interaction.commandName === "candidates") {
           const candidates = await viewCandidates(serverID);
@@ -2115,58 +2125,37 @@ client.on("interactionCreate", async (interaction) => {
             if (await userExists(senderID, serverID)) {
               exists = true;
             }
-            let endorsementsNeeded;
-            const numUsers = (await getUsers(serverID)).length;
             for (let i = 0; i < candidates.length; i += 1) {
-              let currentVotes = await getUserEndorsements(
-                candidates[i].userID,
-                serverID
-              );
-              if (numUsers === 2 && currentVotes > 1) {
-                endorsementsNeeded = 1;
-              } else {
-                endorsementsNeeded =
-                  (await votesNeeded(candidates[i].userID, serverID)) -
-                  currentVotes;
-              }
-              let expiryDate = addTwoWeeks(candidates[i].requestDate);
-              if (endorsementsNeeded > 1) {
-                message +=
-                  "<@" +
-                  candidates[i].userID +
-                  ">, " +
-                  endorsementsNeeded +
-                  " needed <t:" +
-                  expiryDate +
-                  ":R>";
-              } else {
-                message +=
-                  "<@" +
-                  candidates[i].userID +
-                  ">, " +
-                  endorsementsNeeded +
-                  " needed <t:" +
-                  expiryDate +
-                  ":R>";
-              }
+              let expiryDate = addOneDay(candidates[i].requestDate);
+              message +=
+                "<@" +
+                candidates[i].userID +
+                ">, " +
+                "<t:" +
+                expiryDate +
+                ":R>";
               if (exists) {
-                if (
-                  await alreadyEndorsed(
-                    senderID,
-                    candidates[i].userID,
-                    serverID
-                  )
-                ) {
-                  message += " ✅\n";
-                } else {
-                  message += " ❌\n";
+                try {
+                  if (
+                    await checkEndorsement(
+                      senderID,
+                      candidates[i].userID,
+                      serverID
+                    )
+                  ) {
+                    message += " ❌\n";
+                  } else {
+                    message += " ✅\n";
+                  }
+                } catch (error) {
+                  message += "\n";
                 }
               } else {
                 message += "\n";
               }
             }
             message +=
-              "\nIf you are a member, use '/endorse' to endorse any of the above candidates!";
+              "\nIf you are a member, use '/endorse' or '/reject' to vote on any of the above candidates!";
             interaction.editReply({ content: message, ephemeral: true });
           }
         } else if (interaction.commandName === "stats") {
@@ -2217,7 +2206,7 @@ client.on("interactionCreate", async (interaction) => {
             if (await hasRequested(receiverID, serverID)) {
               if (await alreadyEndorsed(senderID, receiverID, serverID)) {
                 interaction.editReply({
-                  content: "You have already endorsed <@" + receiverID + ">!",
+                  content: "You have already voted on <@" + receiverID + ">!",
                   ephemeral: true,
                 });
               } else {
@@ -2225,19 +2214,18 @@ client.on("interactionCreate", async (interaction) => {
                   receiverID,
                   serverID
                 );
-                const numUsers = (await getUsers(serverID)).length;
                 const endorsingPower = await getEndorsingPower(
                   senderID,
                   serverID
                 );
                 if (endorsingPower > 0) {
-                  updateEndorsements(
+                  addEndorsement(
                     receiverID,
                     serverID,
                     currentVotes + endorsingPower
                   );
                   for (let i = 0; i < endorsingPower; i++) {
-                    recordEndorsement(senderID, receiverID, serverID);
+                    recordEndorsement(senderID, receiverID, serverID, false);
                   }
                   interaction.editReply({
                     content:
@@ -2251,60 +2239,9 @@ client.on("interactionCreate", async (interaction) => {
                       interaction.guild.channels.cache
                         .get(stats.feedChannel)
                         .send(
-                          "<@" + senderID + "> endorsed <@" + receiverID + ">"
+                          "<@" + senderID + "> voted on <@" + receiverID + ">"
                         );
                     } catch (error) {}
-                  }
-                  let endorsementsNeeded = await votesNeeded(
-                    receiverID,
-                    serverID
-                  );
-                  if (
-                    currentVotes + endorsingPower >= endorsementsNeeded ||
-                    (numUsers === 2 && currentVotes > 1)
-                  ) {
-                    try {
-                      await interaction.guild.members.cache
-                        .get(interaction.options.getUser("user").id)
-                        .roles.add(String(stats.generalRoleID))
-                        .catch((err) => {
-                          console.log(err);
-                        });
-                    } catch (error) {
-                      interaction.options
-                        .getUser("user")
-                        .send(
-                          "You have been accepted into the " +
-                            serverDisplayName +
-                            " group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!"
-                        )
-                        .catch((err) => {});
-                    }
-                    initUser(receiverID, serverID, stats.income);
-                    await clearEndorsements(receiverID, serverID);
-                    clearRequest(receiverID, serverID);
-                    interaction.options
-                      .getUser("user")
-                      .send(
-                        "You have been accepted into the " +
-                          serverDisplayName +
-                          " group!"
-                      )
-                      .catch((err) => {});
-                    if (
-                      stats.feedChannel !== null &&
-                      stats.feedChannel !== ""
-                    ) {
-                      try {
-                        interaction.guild.channels.cache
-                          .get(stats.feedChannel)
-                          .send(
-                            "<@" +
-                              receiverID +
-                              "> has been accepted into the group!"
-                          );
-                      } catch (error) {}
-                    }
                   }
                 } else {
                   interaction.editReply({
@@ -2329,53 +2266,65 @@ client.on("interactionCreate", async (interaction) => {
                 });
               }
             }
-          } else if (interaction.commandName === "unendorse") {
-            if (await alreadyDelegated(senderID, serverID)) {
-              interaction.editReply({
-                content: "You have delegated your endorsing/unendorsing power",
-                ephemeral: true,
-              });
-            } else {
-              const userToUnendorse = interaction.options.getUser("user").id;
-              if (await alreadyEndorsed(senderID, userToUnendorse, serverID)) {
-                const currentVotes = await getUserEndorsements(
-                  userToUnendorse,
-                  serverID
-                );
-                const numEndorsements = await getNumEndorsementsFromUser(
-                  senderID,
-                  userToUnendorse,
-                  serverID
-                );
-                updateEndorsements(
-                  userToUnendorse,
-                  serverID,
-                  currentVotes - numEndorsements
-                );
-                await unendorse(senderID, userToUnendorse, serverID);
+          } else if (interaction.commandName === "reject") {
+            const receiverID = interaction.options.getUser("user").id;
+            if (await hasRequested(receiverID, serverID)) {
+              if (await alreadyEndorsed(senderID, receiverID, serverID)) {
                 interaction.editReply({
-                  content:
-                    "You have successfully unendorsed <@" +
-                    userToUnendorse +
-                    ">",
+                  content: "You have already voted on <@" + receiverID + ">!",
                   ephemeral: true,
                 });
-                if (stats.feedChannel !== null && stats.feedChannel !== "") {
-                  try {
-                    interaction.guild.channels.cache
-                      .get(stats.feedChannel)
-                      .send(
-                        "<@" +
-                          senderID +
-                          "> unendorsed <@" +
-                          userToUnendorse +
-                          ">"
-                      );
-                  } catch (error) {}
+              } else {
+                const currentVotes = await getUserRejections(
+                  receiverID,
+                  serverID
+                );
+                const endorsingPower = await getEndorsingPower(
+                  senderID,
+                  serverID
+                );
+                if (endorsingPower > 0) {
+                  addRejection(
+                    receiverID,
+                    serverID,
+                    currentVotes + endorsingPower
+                  );
+                  for (let i = 0; i < endorsingPower; i++) {
+                    recordEndorsement(senderID, receiverID, serverID, true);
+                  }
+                  interaction.editReply({
+                    content:
+                      "Thank you for your rejection of <@" + receiverID + ">!",
+                    ephemeral: true,
+                  });
+                  if (stats.feedChannel !== null && stats.feedChannel !== "") {
+                    try {
+                      interaction.guild.channels.cache
+                        .get(stats.feedChannel)
+                        .send(
+                          "<@" + senderID + "> voted on <@" + receiverID + ">"
+                        );
+                    } catch (error) {}
+                  }
+                } else {
+                  interaction.editReply({
+                    content:
+                      "You currently have no endorsing power. Use the '/undelegate_endorsements' command to regain your power",
+                    ephemeral: true,
+                  });
                 }
+              }
+            } else {
+              if (await userExists(receiverID, serverID)) {
+                interaction.editReply({
+                  content:
+                    "<@" + receiverID + "> is already a member of this group!",
+                  ephemeral: true,
+                });
               } else {
                 interaction.editReply({
-                  content: "You have not endorsed <@" + userToUnendorse + ">",
+                  content:
+                    "<@" + receiverID + "> has not requested to join the group",
                   ephemeral: true,
                 });
               }
@@ -3792,7 +3741,6 @@ client.on("interactionCreate", async (interaction) => {
           });
         } else {
           const stats = await getServerStats(serverID);
-          const serverDisplayName = interaction.guild.name;
           terminateUser(senderID, serverID);
           await interaction.guild.members.cache
             .get(senderID)
@@ -3800,59 +3748,6 @@ client.on("interactionCreate", async (interaction) => {
             .catch((err) => {
               console.log(err);
             });
-          const allEndorsements = await getAllEndorsements(serverID);
-          if (allEndorsements[0].length >= 1) {
-            for (let i = 0; i < allEndorsements[0].length; i += 1) {
-              let endorsementsNeeded = await votesNeeded(
-                allEndorsements[0][i],
-                serverID
-              );
-              if (
-                allEndorsements[1][i] >= endorsementsNeeded ||
-                (numUsers === 2 && allEndorsements[1][i] > 1)
-              ) {
-                const endorsedUser = await client.users.fetch(
-                  allEndorsements[0][i]
-                );
-                const endorsedMember = await interaction.guild.members.fetch(
-                  endorsedUser.id
-                );
-                try {
-                  await endorsedMember.roles.add(String(stats.generalRoleID));
-                } catch (error) {
-                  console.log(error);
-                  endorsedUser
-                    .send(
-                      "You have been accepted into the " +
-                        serverDisplayName +
-                        " group! We were unable to assign the general role. Please let a server admin know.\n\nThe most likely cause is that the role for this bot has been moved below the general role in the server settings!"
-                    )
-                    .catch((err) => {});
-                }
-                initUser(endorsedUser.id, serverID, stats.income);
-                await clearEndorsements(endorsedUser.id, serverID);
-                clearRequest(endorsedUser.id, serverID);
-                endorsedUser
-                  .send(
-                    "You have been accepted into the " +
-                      serverDisplayName +
-                      " group!"
-                  )
-                  .catch((err) => {});
-                if (stats.feedChannel !== null && stats.feedChannel !== "") {
-                  try {
-                    interaction.guild.channels.cache
-                      .get(stats.feedChannel)
-                      .send(
-                        "<@" +
-                          endorsedUser.id +
-                          "> has been accepted into the group!"
-                      );
-                  } catch (error) {}
-                }
-              }
-            }
-          }
           interaction.editReply({
             content:
               "You have been successfully withdrawn from this group. To request to join back in, use the '/join' command",
@@ -3932,6 +3827,7 @@ export async function main() {
     MyVoteCommand,
     StatsCommand,
     EndorseCommand,
+    RejectCommand,
     CandidatesCommand,
     StrikeCommand,
     RecentCommand,
@@ -3946,7 +3842,6 @@ export async function main() {
     WithdrawCommand,
     DelegateCommand,
     UndelegateCommand,
-    UnendorseCommand,
     MarketCommand,
     MarketAddCommand,
     MarketRemoveCommand,
@@ -3973,6 +3868,6 @@ export async function main() {
 }
 
 main();
-runPayments();
+runHourlyChecker();
 checkCoupons();
 checkWeekly();
