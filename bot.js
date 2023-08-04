@@ -180,7 +180,7 @@ export async function getUserEndorsements(userID, serverID) {
     .eq("userID", userID)
     .eq("serverID", serverID);
   if (!data || data.length === 0) {
-    return 0;
+    return null;
   }
   return data[0].endorsements;
 }
@@ -192,7 +192,7 @@ export async function getUserRejections(userID, serverID) {
     .eq("userID", userID)
     .eq("serverID", serverID);
   if (!data || data.length === 0) {
-    return 0;
+    return null;
   }
   return data[0].rejections;
 }
@@ -2050,9 +2050,7 @@ client.on("interactionCreate", async (interaction) => {
               ephemeral: true,
             });
           } else {
-            try {
-              await getUserEndorsements(senderID, serverID);
-            } catch (error) {
+            if ((await getUserEndorsements(senderID, serverID)) == null) {
               const numUsers = (await getUsers(serverID)).length;
               requestToJoin(
                 senderID,
@@ -2091,11 +2089,12 @@ client.on("interactionCreate", async (interaction) => {
                 } catch (error) {}
               }
               return;
+            } else {
+              interaction.editReply({
+                content: "You have already requested to join this group",
+                ephemeral: true,
+              });
             }
-            interaction.editReply({
-              content: "You have already requested to join this group",
-              ephemeral: true,
-            });
             const users = await getUsers(serverID);
             for (let index = 0; index < users.length; index++) {
               if (users[index] !== senderID) {
