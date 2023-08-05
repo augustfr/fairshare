@@ -2084,7 +2084,7 @@ client.on("interactionCreate", async (interaction) => {
                     .send(
                       "<@" +
                         senderID +
-                        "> has requested to join the group! Members can use '/endorse' if you'd like to give them an endorsement!"
+                        "> has requested to join the group! Members can use '/endorse' or '/reject' to cast their vote!"
                     );
                 } catch (error) {}
               }
