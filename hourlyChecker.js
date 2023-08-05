@@ -90,6 +90,9 @@ async function checkEndorsementStatus(serverID) {
       const userEndorsements = await getUserEndorsements(receiverID, serverID);
       const userRejections = await getUserRejections(receiverID, serverID);
       const totalMembers = (await getUsers(serverID)).length;
+      if (userEndorsements == 0 && userRejections == 0) {
+        userRejections = 1;
+      }
       if (
         userEndorsements / (userEndorsements + userRejections) >
           superMajority ||
