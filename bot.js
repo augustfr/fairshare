@@ -1702,8 +1702,7 @@ client.on("interactionCreate", async (interaction) => {
       ) {
         if (globalUserStats.length === 0) {
           interaction.editReply({
-            content:
-              "You are not in any groups. Go to a group's server and use '/join'",
+            content: "You are not in any groups",
             ephemeral: true,
           });
         } else {
@@ -2495,7 +2494,7 @@ client.on("interactionCreate", async (interaction) => {
                 content:
                   "<@" +
                   receiverID +
-                  "> has not joined the group. They can join with '/join'",
+                  "> has not joined the group. You can sponsor them with '/sponsor'",
                 ephemeral: true,
               });
             }
@@ -2813,7 +2812,7 @@ client.on("interactionCreate", async (interaction) => {
                       .send(
                         "You have been voted out of the " +
                           serverDisplayName +
-                          " group. You can request to join back in by going to the group's server and using '/join'"
+                          " group."
                       )
                       .catch((err) => {});
                   } else {
@@ -3527,7 +3526,7 @@ client.on("interactionCreate", async (interaction) => {
         } else {
           interaction.editReply({
             content:
-              "Please request to join the group by typing '/join' if you have not already",
+              "You need to be sponsored by a current member. Please contact a member of the group to sponsor you.",
             ephemeral: true,
           });
         }
@@ -3773,8 +3772,7 @@ client.on("interactionCreate", async (interaction) => {
               console.log(err);
             });
           interaction.editReply({
-            content:
-              "You have been successfully withdrawn from this group. To request to join back in, use the '/join' command",
+            content: "You have been successfully withdrawn from this group.",
             ephemeral: true,
           });
         }
