@@ -15,7 +15,7 @@ import { REST } from "@discordjs/rest";
 
 import { createClient } from "@supabase/supabase-js";
 
-import InitCommand from "./commands/init.js";
+import SponsorCommand from "./commands/sponsor.js";
 import BalanceCommand from "./commands/getBalance.js";
 import SendCommand from "./commands/send.js";
 import SetupCommand from "./commands/setup.js";
@@ -2043,37 +2043,58 @@ client.on("interactionCreate", async (interaction) => {
       } else if (stats.name !== null) {
         const name = stats.name;
         const serverDisplayName = interaction.guild.name;
-        if (interaction.commandName === "join") {
-          if (await userExists(senderID, serverID)) {
+        if (interaction.commandName === "sponsor") {
+          const receiverID = interaction.options.getUser("user").id;
+          if (await userExists(receiverID, serverID)) {
             interaction.editReply({
-              content: "You are already in this group",
+              content: "This user is already in this group!",
               ephemeral: true,
             });
           } else {
             if ((await getUserEndorsements(senderID, serverID)) == null) {
-              const numUsers = (await getUsers(serverID)).length;
-              requestToJoin(
-                senderID,
-                serverID,
-                Math.floor(numUsers * simpleMajority + 1)
+              requestToJoin(receiverID, serverID);
+              const currentVotes = await getUserEndorsements(
+                receiverID,
+                serverID
               );
+              const endorsingPower = await getEndorsingPower(
+                senderID,
+                serverID
+              );
+              if (endorsingPower > 0) {
+                addEndorsement(
+                  receiverID,
+                  serverID,
+                  currentVotes + endorsingPower
+                );
+                for (let i = 0; i < endorsingPower; i++) {
+                  recordEndorsement(senderID, receiverID, serverID, false);
+                }
+              }
               interaction.editReply({
                 content:
-                  "You have successfully requested to join the " +
+                  "You have successfully sponsored <@" +
+                  receiverID +
+                  ">'s invitation to join the " +
                   serverDisplayName +
-                  " group!\n\nIf you aren't accepted into the group within 48 hours, your request will expire and you'll have to submit a new join request. If you haven't already, send an intro so current members can learn more about you!",
+                  " group!\n\nIf you they accepted into the group within 48 hours, the request will expire. Your endorsement has already been recorded (no need to use /endorse)",
                 ephemeral: true,
               });
-              interaction.member
+              interaction.options
+                .getUser("user")
                 .send(
-                  "You have successfully requested to join the " +
+                  "You have been sponsored by <@" +
+                    senderID +
+                    "> to join the  " +
                     serverDisplayName +
-                    " group!\n\nIf you aren't accepted into the group within 48 hours, your request will expire and you'll have to submit a new join request."
+                    " group!\n\nIf you aren't accepted into the group within 48 hours, the request will expire."
                 )
                 .catch((err) => {
                   interaction.followUp({
                     content:
-                      "Please allow DMs from members in this server so the bot can DM you if you are accepted!",
+                      "We were unable to DM <@" +
+                      receiverID +
+                      "> to inform them about the sponsor. This is likely because they don't allow for DMs from server members.",
                     ephemeral: true,
                   });
                 });
@@ -2084,14 +2105,16 @@ client.on("interactionCreate", async (interaction) => {
                     .send(
                       "<@" +
                         senderID +
-                        "> has requested to join the group! Members can use '/endorse' or '/reject' to cast their vote!"
+                        "> has sponsored <@" +
+                        receiverID +
+                        ">'s invitation to join the group! Members can use '/endorse' or '/reject' to cast their vote!"
                     );
                 } catch (error) {}
               }
               return;
             } else {
               interaction.editReply({
-                content: "You have already requested to join this group",
+                content: "This user already has an active request!",
                 ephemeral: true,
               });
             }
@@ -2103,7 +2126,9 @@ client.on("interactionCreate", async (interaction) => {
                   .send(
                     "<@" +
                       senderID +
-                      "> has requested to join " +
+                      "> has sponsored <@" +
+                      receiverID +
+                      "> to join " +
                       serverDisplayName +
                       ". Please go to the server, and either /endorse or /reject them."
                   )
@@ -3814,7 +3839,7 @@ client.on("interactionCreate", async (interaction) => {
 
 export async function main() {
   const commands = [
-    InitCommand,
+    SponsorCommand,
     BalanceCommand,
     SendCommand,
     SetupCommand,
