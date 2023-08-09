@@ -46,6 +46,7 @@ import MarketCommand from "./commands/market.js";
 import MarketAddCommand from "./commands/marketAdd.js";
 import MarketRemoveCommand from "./commands/marketRemove.js";
 import SendAllCommand from "./commands/sendAll.js";
+import ViewSponsorCommand from "./commands/viewSponsor.js";
 
 config();
 
@@ -164,12 +165,13 @@ async function computeGiniIndex(serverID) {
   return sumOfDifferences / (2 * num * num * averageBalance);
 }
 
-async function requestToJoin(userID, serverID) {
+async function requestToJoin(userID, sponsorID, serverID) {
   const currentDate = new Date();
   const { error } = await supabase.from("joinRequests").insert({
     userID: userID,
     serverID: serverID,
     requestDate: currentDate,
+    sponsor: sponsorID,
   });
 }
 
@@ -438,12 +440,13 @@ async function addExchangePair(
   return data;
 }
 
-export async function initUser(userID, serverID, income) {
+export async function initUser(userID, sponsorID, serverID, income) {
   const currentDate = new Date();
   const { error } = await supabase.from("balances").insert({
     userID: userID,
     balance: income,
     serverID: serverID,
+    sponsor: sponsorID,
     dateJoined: currentDate,
   });
 }
@@ -453,16 +456,6 @@ async function userExists(userID, serverID) {
     .from("balances")
     .select("serverID")
     .eq("userID", userID)
-    .eq("serverID", serverID)
-    .limit(1)
-    .single();
-  return data !== null;
-}
-
-async function serverExists(serverID) {
-  const { data } = await supabase
-    .from("balances")
-    .select("serverID")
     .eq("serverID", serverID)
     .limit(1)
     .single();
@@ -508,6 +501,15 @@ async function userVoted(userID, serverID) {
   } else {
     return true;
   }
+}
+
+async function getSponsor(userID, serverID) {
+  const { data, error } = await supabase
+    .from("balances")
+    .select("sponsor")
+    .eq("userID", userID)
+    .eq("serverID", serverID);
+  return data[0].sponsor;
 }
 
 async function strikeAlreadyGiven(senderID, receiverID, serverID) {
@@ -2012,7 +2014,7 @@ client.on("interactionCreate", async (interaction) => {
             if (fee === null) {
               fee = 8;
             }
-            initUser(senderID, serverID, income);
+            initUser(senderID, null, serverID, income);
             setServerStats(
               serverID,
               fee,
@@ -2052,7 +2054,7 @@ client.on("interactionCreate", async (interaction) => {
               });
             } else {
               if ((await getUserEndorsements(senderID, serverID)) == null) {
-                requestToJoin(receiverID, serverID);
+                requestToJoin(receiverID, senderID, serverID);
                 const currentVotes = await getUserEndorsements(
                   receiverID,
                   serverID
@@ -2140,6 +2142,28 @@ client.on("interactionCreate", async (interaction) => {
             interaction.editReply({
               content:
                 "You must be a member in order to sponsor a new user's invitation!",
+              ephemeral: true,
+            });
+          }
+        } else if (interaction.commandName === "view_sponsor") {
+          const userID = interaction.options.getUser("user").id;
+          if (await userExists(userID, serverID)) {
+            const sponsorID = await getSponsor(userID, serverID);
+            if (sponsorID === null) {
+              interaction.editReply({
+                content: "<@" + userID + "> does not have a sponsor.",
+                ephemeral: true,
+              });
+            } else {
+              interaction.editReply({
+                content:
+                  "<@" + userID + "> was sponsored by <@" + sponsorID + ">",
+                ephemeral: true,
+              });
+            }
+          } else {
+            interaction.editReply({
+              content: "<@" + userID + " is not a member of the group",
               ephemeral: true,
             });
           }
@@ -3882,6 +3906,7 @@ export async function main() {
     MarketAddCommand,
     MarketRemoveCommand,
     SendAllCommand,
+    ViewSponsorCommand,
   ];
 
   try {

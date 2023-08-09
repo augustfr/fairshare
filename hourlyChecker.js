@@ -41,6 +41,16 @@ async function updatePayout(serverID, newDate) {
     .eq("serverID", serverID);
 }
 
+async function getSponsor(userID, serverID) {
+  const { data, error } = await supabase
+    .from("joinRequests")
+    .select("sponsor")
+    .eq("userID", userID)
+    .eq("serverID", serverID);
+  console.log(data);
+  return data[0].sponsor;
+}
+
 async function getServers() {
   const { data, error } = await supabase.from("serverStats").select();
   const result = data.map((a) => a.serverID);
@@ -111,7 +121,8 @@ async function checkEndorsementStatus(serverID) {
             )
             .catch((err) => {});
         }
-        initUser(receiverID, serverID, stats.income);
+        let sponsorID = await getSponsor(receiverID, serverID);
+        initUser(receiverID, sponsorID, serverID, stats.income);
         await clearEndorsements(receiverID, serverID);
         clearRequest(receiverID, serverID);
         user
@@ -151,48 +162,48 @@ export async function runHourlyChecker() {
     for (let i = 0; i < serverList.length; i++) {
       const stats = await getServerStats(serverList[i]);
 
-      if (stats.creationTime !== null) {
-        if (stats.income > 0) {
-          const details = [stats.serverID, stats.latestPayout];
+      // if (stats.creationTime !== null) {
+      //   if (stats.income > 0) {
+      //     const details = [stats.serverID, stats.latestPayout];
 
-          if (Date.now() - new Date(details[1]).getTime() > 86400000) {
-            const users = await getUsers(stats.serverID);
-            for (let index = 0; index < users.length; index++) {
-              const member = await checkMember(users[index], stats.serverID);
-              if (member) {
-                const newAmount =
-                  (await getUserBalance(users[index], stats.serverID)) +
-                  stats.income;
-                await updateBalance(users[index], stats.serverID, newAmount);
-              }
-            }
-            const newPayoutDate = new Date(
-              new Date(details[1]).getTime() + 86400000
-            );
-            await updatePayout(stats.serverID, newPayoutDate);
-            console.log("Sent payouts to " + stats.serverID);
-            if (stats.feedChannel !== null && stats.feedChannel !== "") {
-              try {
-                await sendMessage(
-                  "<@&" +
-                    stats.generalRoleID +
-                    ">, your dividend of " +
-                    stats.income +
-                    " " +
-                    stats.name +
-                    " shares have been sent!",
-                  stats.feedChannel
-                );
-              } catch (error) {
-                console.log(
-                  "Dividend message failed to send to active feed channel in " +
-                    stats.serverID
-                );
-              }
-            }
-          }
-        }
-      }
+      //     if (Date.now() - new Date(details[1]).getTime() > 86400000) {
+      //       const users = await getUsers(stats.serverID);
+      //       for (let index = 0; index < users.length; index++) {
+      //         const member = await checkMember(users[index], stats.serverID);
+      //         if (member) {
+      //           const newAmount =
+      //             (await getUserBalance(users[index], stats.serverID)) +
+      //             stats.income;
+      //           await updateBalance(users[index], stats.serverID, newAmount);
+      //         }
+      //       }
+      //       const newPayoutDate = new Date(
+      //         new Date(details[1]).getTime() + 86400000
+      //       );
+      //       await updatePayout(stats.serverID, newPayoutDate);
+      //       console.log("Sent payouts to " + stats.serverID);
+      //       if (stats.feedChannel !== null && stats.feedChannel !== "") {
+      //         try {
+      //           await sendMessage(
+      //             "<@&" +
+      //               stats.generalRoleID +
+      //               ">, your dividend of " +
+      //               stats.income +
+      //               " " +
+      //               stats.name +
+      //               " shares have been sent!",
+      //             stats.feedChannel
+      //           );
+      //         } catch (error) {
+      //           console.log(
+      //             "Dividend message failed to send to active feed channel in " +
+      //               stats.serverID
+      //           );
+      //         }
+      //       }
+      //     }
+      //   }
+      // }
       await checkEndorsementStatus(serverList[i]);
     }
     await sleep(3600000);
