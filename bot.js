@@ -2183,6 +2183,7 @@ client.on("interactionCreate", async (interaction) => {
             for (let i = 0; i < candidates.length; i += 1) {
               let expiryDate = addTwoDays(candidates[i].requestDate);
               let currentTime = Date.now() / 1000;
+              const sponsorID = await getSponsor(userID, serverID);
 
               if (expiryDate < currentTime) {
                 message += "<@" + candidates[i].userID + ">, within an hour";
@@ -2190,10 +2191,10 @@ client.on("interactionCreate", async (interaction) => {
                 message +=
                   "<@" +
                   candidates[i].userID +
-                  ">, " +
-                  "<t:" +
-                  expiryDate +
-                  ":R>";
+                  "> (sponsored by <@" +
+                  sponsorID +
+                  ">), ";
+                "<t:" + expiryDate + ":R>";
               }
               if (exists) {
                 try {
