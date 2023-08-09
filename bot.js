@@ -107,7 +107,7 @@ function roundUp(num) {
   return Math.ceil(num * 100) / 100;
 }
 
-function addOneDay(dateStr) {
+function addTwoDays(dateStr) {
   const date = new Date(dateStr);
   date.setDate(date.getDate() + 2);
   return Math.floor(date.getTime() / 1000);
@@ -2157,14 +2157,20 @@ client.on("interactionCreate", async (interaction) => {
               exists = true;
             }
             for (let i = 0; i < candidates.length; i += 1) {
-              let expiryDate = addOneDay(candidates[i].requestDate);
-              message +=
-                "<@" +
-                candidates[i].userID +
-                ">, " +
-                "<t:" +
-                expiryDate +
-                ":R>";
+              let expiryDate = addTwoDays(candidates[i].requestDate);
+              let currentTime = Date.now() / 1000;
+
+              if (expiryDate < currentTime) {
+                message += "<@" + candidates[i].userID + ">, within an hour";
+              } else {
+                message +=
+                  "<@" +
+                  candidates[i].userID +
+                  ">, " +
+                  "<t:" +
+                  expiryDate +
+                  ":R>";
+              }
               if (exists) {
                 try {
                   if (
