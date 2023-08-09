@@ -2163,7 +2163,7 @@ client.on("interactionCreate", async (interaction) => {
             }
           } else {
             interaction.editReply({
-              content: "<@" + userID + " is not a member of the group",
+              content: "<@" + userID + "> is not a member of the group",
               ephemeral: true,
             });
           }
