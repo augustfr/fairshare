@@ -88,7 +88,7 @@ async function checkEndorsementStatus(serverID) {
       const receiverID = users[index].userID;
       const user = await guild.members.fetch(receiverID);
       const userEndorsements = await getUserEndorsements(receiverID, serverID);
-      const userRejections = await getUserRejections(receiverID, serverID);
+      let userRejections = await getUserRejections(receiverID, serverID);
       const totalMembers = (await getUsers(serverID)).length;
       if (userEndorsements == 0 && userRejections == 0) {
         userRejections = 1;
