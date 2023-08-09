@@ -2044,96 +2044,104 @@ client.on("interactionCreate", async (interaction) => {
         const serverDisplayName = interaction.guild.name;
         if (interaction.commandName === "sponsor") {
           const receiverID = interaction.options.getUser("user").id;
-          if (await userExists(receiverID, serverID)) {
-            interaction.editReply({
-              content: "This user is already in this group!",
-              ephemeral: true,
-            });
-          } else {
-            if ((await getUserEndorsements(senderID, serverID)) == null) {
-              requestToJoin(receiverID, serverID);
-              const currentVotes = await getUserEndorsements(
-                receiverID,
-                serverID
-              );
-              const endorsingPower = await getEndorsingPower(
-                senderID,
-                serverID
-              );
-              if (endorsingPower > 0) {
-                addEndorsement(
-                  receiverID,
-                  serverID,
-                  currentVotes + endorsingPower
-                );
-                for (let i = 0; i < endorsingPower; i++) {
-                  recordEndorsement(senderID, receiverID, serverID, false);
-                }
-              }
+          if (await userExists(senderID, serverID)) {
+            if (await userExists(receiverID, serverID)) {
               interaction.editReply({
-                content:
-                  "You have successfully sponsored <@" +
-                  receiverID +
-                  ">'s invitation to join the " +
-                  serverDisplayName +
-                  " group!\n\nIf you they accepted into the group within 48 hours, the request will expire. Your endorsement has already been recorded (no need to use /endorse)",
+                content: "This user is already in this group!",
                 ephemeral: true,
               });
-              interaction.options
-                .getUser("user")
-                .send(
-                  "You have been sponsored by <@" +
-                    senderID +
-                    "> to join the  " +
+            } else {
+              if ((await getUserEndorsements(senderID, serverID)) == null) {
+                requestToJoin(receiverID, serverID);
+                const currentVotes = await getUserEndorsements(
+                  receiverID,
+                  serverID
+                );
+                const endorsingPower = await getEndorsingPower(
+                  senderID,
+                  serverID
+                );
+                if (endorsingPower > 0) {
+                  addEndorsement(
+                    receiverID,
+                    serverID,
+                    currentVotes + endorsingPower
+                  );
+                  for (let i = 0; i < endorsingPower; i++) {
+                    recordEndorsement(senderID, receiverID, serverID, false);
+                  }
+                }
+                interaction.editReply({
+                  content:
+                    "You have successfully sponsored <@" +
+                    receiverID +
+                    ">'s invitation to join the " +
                     serverDisplayName +
-                    " group!\n\nIf you aren't accepted into the group within 48 hours, the request will expire."
-                )
-                .catch((err) => {
-                  interaction.followUp({
-                    content:
-                      "We were unable to DM <@" +
-                      receiverID +
-                      "> to inform them about the sponsor. This is likely because they don't allow for DMs from server members.",
-                    ephemeral: true,
-                  });
+                    " group!\n\nIf you they accepted into the group within 48 hours, the request will expire. Your endorsement has already been recorded (no need to use /endorse)",
+                  ephemeral: true,
                 });
-              if (stats.feedChannel !== null && stats.feedChannel !== "") {
-                try {
-                  interaction.guild.channels.cache
-                    .get(stats.feedChannel)
+                interaction.options
+                  .getUser("user")
+                  .send(
+                    "You have been sponsored by <@" +
+                      senderID +
+                      "> to join the  " +
+                      serverDisplayName +
+                      " group!\n\nIf you aren't accepted into the group within 48 hours, the request will expire."
+                  )
+                  .catch((err) => {
+                    interaction.followUp({
+                      content:
+                        "We were unable to DM <@" +
+                        receiverID +
+                        "> to inform them about the sponsor. This is likely because they don't allow for DMs from server members.",
+                      ephemeral: true,
+                    });
+                  });
+                if (stats.feedChannel !== null && stats.feedChannel !== "") {
+                  try {
+                    interaction.guild.channels.cache
+                      .get(stats.feedChannel)
+                      .send(
+                        "<@" +
+                          senderID +
+                          "> has sponsored <@" +
+                          receiverID +
+                          ">'s invitation to join the group! Members can use '/endorse' or '/reject' to cast their vote!"
+                      );
+                  } catch (error) {}
+                }
+                return;
+              } else {
+                interaction.editReply({
+                  content: "This user already has an active request!",
+                  ephemeral: true,
+                });
+              }
+              const users = await getUsers(serverID);
+              for (let index = 0; index < users.length; index++) {
+                if (users[index] !== senderID) {
+                  const user = await client.users.fetch(users[index]);
+                  user
                     .send(
                       "<@" +
                         senderID +
                         "> has sponsored <@" +
                         receiverID +
-                        ">'s invitation to join the group! Members can use '/endorse' or '/reject' to cast their vote!"
-                    );
-                } catch (error) {}
-              }
-              return;
-            } else {
-              interaction.editReply({
-                content: "This user already has an active request!",
-                ephemeral: true,
-              });
-            }
-            const users = await getUsers(serverID);
-            for (let index = 0; index < users.length; index++) {
-              if (users[index] !== senderID) {
-                const user = await client.users.fetch(users[index]);
-                user
-                  .send(
-                    "<@" +
-                      senderID +
-                      "> has sponsored <@" +
-                      receiverID +
-                      "> to join " +
-                      serverDisplayName +
-                      ". Please go to the server, and either /endorse or /reject them."
-                  )
-                  .catch((err) => {});
+                        "> to join " +
+                        serverDisplayName +
+                        ". Please go to the server, and either /endorse or /reject them."
+                    )
+                    .catch((err) => {});
+                }
               }
             }
+          } else {
+            interaction.editReply({
+              content:
+                "You must be a member in order to sponsor a new user's invitation!",
+              ephemeral: true,
+            });
           }
         } else if (interaction.commandName === "candidates") {
           const candidates = await viewCandidates(serverID);
