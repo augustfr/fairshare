@@ -2129,23 +2129,6 @@ client.on("interactionCreate", async (interaction) => {
                   ephemeral: true,
                 });
               }
-              const users = await getUsers(serverID);
-              for (let index = 0; index < users.length; index++) {
-                if (users[index] !== senderID) {
-                  const user = await client.users.fetch(users[index]);
-                  user
-                    .send(
-                      "<@" +
-                        senderID +
-                        "> has sponsored <@" +
-                        receiverID +
-                        "> to join " +
-                        serverDisplayName +
-                        ". Please go to the server, and either /endorse or /reject them."
-                    )
-                    .catch((err) => {});
-                }
-              }
             }
           } else {
             interaction.editReply({
