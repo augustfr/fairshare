@@ -512,6 +512,16 @@ async function getSponsor(userID, serverID) {
   return data[0].sponsor;
 }
 
+export async function getSponsorFromRequest(userID, serverID) {
+  const { data, error } = await supabase
+    .from("joinRequests")
+    .select("sponsor")
+    .eq("userID", userID)
+    .eq("serverID", serverID);
+  console.log(data);
+  return data[0].sponsor;
+}
+
 async function strikeAlreadyGiven(senderID, receiverID, serverID) {
   const { data } = await supabase
     .from("strikes")
@@ -2183,7 +2193,10 @@ client.on("interactionCreate", async (interaction) => {
             for (let i = 0; i < candidates.length; i += 1) {
               let expiryDate = addTwoDays(candidates[i].requestDate);
               let currentTime = Date.now() / 1000;
-              const sponsorID = await getSponsor(userID, serverID);
+              const sponsorID = await getSponsorFromRequest(
+                candidates[i].userID,
+                serverID
+              );
 
               if (expiryDate < currentTime) {
                 message += "<@" + candidates[i].userID + ">, within an hour";

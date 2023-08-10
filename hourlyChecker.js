@@ -6,6 +6,7 @@ import {
   getUserBalance,
   getUserEndorsements,
   getUserRejections,
+  getSponsorFromRequest,
   initUser,
   clearEndorsements,
   clearRequest,
@@ -39,16 +40,6 @@ async function updatePayout(serverID, newDate) {
     .from("serverStats")
     .update({ latestPayout: newDate })
     .eq("serverID", serverID);
-}
-
-async function getSponsor(userID, serverID) {
-  const { data, error } = await supabase
-    .from("joinRequests")
-    .select("sponsor")
-    .eq("userID", userID)
-    .eq("serverID", serverID);
-  console.log(data);
-  return data[0].sponsor;
 }
 
 async function getServers() {
@@ -121,7 +112,7 @@ async function checkEndorsementStatus(serverID) {
             )
             .catch((err) => {});
         }
-        let sponsorID = await getSponsor(receiverID, serverID);
+        let sponsorID = await getSponsorFromRequest(receiverID, serverID);
         initUser(receiverID, sponsorID, serverID, stats.income);
         await clearEndorsements(receiverID, serverID);
         clearRequest(receiverID, serverID);
