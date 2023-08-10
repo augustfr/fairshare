@@ -518,7 +518,6 @@ export async function getSponsorFromRequest(userID, serverID) {
     .select("sponsor")
     .eq("userID", userID)
     .eq("serverID", serverID);
-  console.log(data);
   return data[0].sponsor;
 }
 
