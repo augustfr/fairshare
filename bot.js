@@ -3544,15 +3544,35 @@ client.on("interactionCreate", async (interaction) => {
           } else if (interaction.commandName === "market_remove") {
             const index = interaction.options.getNumber("index");
             const item = await getMarketItem(index);
-            if (item[0].senderID === senderID) {
-              await removeMarketItem(index);
-              interaction.editReply({
-                content: "Successfully removed item",
-                ephemeral: true,
-              });
+            if (item.length > 0) {
+              if (item[0].senderID === senderID) {
+                await removeMarketItem(index);
+                interaction.editReply({
+                  content: "Successfully removed item",
+                  ephemeral: true,
+                });
+                if (stats.feedChannel !== null && stats.feedChannel !== "") {
+                  try {
+                    interaction.guild.channels.cache
+                      .get(stats.feedChannel)
+                      .send(
+                        "<@" +
+                          senderID +
+                          "> has removed: '" +
+                          item[0].item +
+                          "' from the marketplace."
+                      );
+                  } catch (error) {}
+                }
+              } else {
+                interaction.editReply({
+                  content: "You did not create this item",
+                  ephemeral: true,
+                });
+              }
             } else {
               interaction.editReply({
-                content: "You did not create this item",
+                content: "This item does not exist",
                 ephemeral: true,
               });
             }
